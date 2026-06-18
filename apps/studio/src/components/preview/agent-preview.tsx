@@ -69,8 +69,13 @@ export function AgentPreview({
 
       {agent.error ? (
         <div className={styles.errorBanner}>
-          <strong>Request failed</strong>
+          <strong>Preview unavailable</strong>
           <p>{agent.error.message}</p>
+          <p className="text-xs opacity-80">
+            Restart with <code className="rounded bg-black/20 px-1">forge dev</code> from your agent
+            folder, or run <code className="rounded bg-black/20 px-1">npm install</code> if Eve is
+            missing. See CONNECTIONS.md for channel setup.
+          </p>
         </div>
       ) : null}
 

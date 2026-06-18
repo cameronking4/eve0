@@ -1,9 +1,6 @@
-import { execFile } from "node:child_process";
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { promisify } from "node:util";
-
-const execFileAsync = promisify(execFile);
+import { extractJson, runEve } from "../eve-cli.js";
 
 export interface EvalInfo {
   id: string;
@@ -69,11 +66,12 @@ export async function discoverEvalFiles(projectRoot: string): Promise<string[]> 
 
 export async function listProjectEvals(projectRoot: string): Promise<EvalInfo[]> {
   try {
-    const { stdout } = await execFileAsync("npx", ["eve", "eval", "--list"], {
+    const { stdout, stderr, exitCode } = await runEve({
       cwd: projectRoot,
+      args: ["eval", "--list"],
       maxBuffer: 10 * 1024 * 1024,
-      env: process.env,
     });
+    if (exitCode !== 0) throw new Error(stderr || `eve eval --list exited ${exitCode}`);
     const listed = stdout
       .split("\n")
       .map(parseListLine)
@@ -162,30 +160,24 @@ export async function runProjectEvals(
   projectRoot: string,
   ids?: string[],
 ): Promise<EvalRunReport> {
-  const args = ["eve", "eval", "--json", ...(ids?.length ? ids : [])];
-  try {
-    const { stdout } = await execFileAsync("npx", args, {
-      cwd: projectRoot,
-      maxBuffer: 50 * 1024 * 1024,
-      timeout: 300_000,
-      env: process.env,
-    });
-    const jsonStart = stdout.indexOf("{");
-    const jsonText = jsonStart >= 0 ? stdout.slice(jsonStart) : stdout;
-    return normalizeEvalReport(JSON.parse(jsonText) as Record<string, unknown>, stdout);
-  } catch (error) {
-    const err = error as { stdout?: string; message?: string };
-    if (err.stdout) {
-      const jsonStart = err.stdout.indexOf("{");
-      if (jsonStart >= 0) {
-        return normalizeEvalReport(
-          JSON.parse(err.stdout.slice(jsonStart)) as Record<string, unknown>,
-          err.stdout,
-        );
-      }
-    }
-    throw new Error(err.message ?? String(error));
+  const args = ["eval", "--json", ...(ids?.length ? ids : [])];
+  const { stdout, stderr, exitCode } = await runEve({
+    cwd: projectRoot,
+    args,
+    maxBuffer: 50 * 1024 * 1024,
+    timeoutMs: 300_000,
+  });
+
+  // Eve exits non-zero when evals fail, but still emits a JSON report — parse it.
+  const combined = stdout || stderr;
+  const jsonText = extractJson(combined);
+  if (jsonText.startsWith("{")) {
+    return normalizeEvalReport(JSON.parse(jsonText) as Record<string, unknown>, combined);
   }
+  if (exitCode !== 0) {
+    throw new Error(stderr || `eve eval exited ${exitCode}`);
+  }
+  throw new Error("eve eval produced no JSON report");
 }
 
 export async function readEvalFile(projectRoot: string, relPath: string): Promise<string> {

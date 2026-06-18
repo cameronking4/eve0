@@ -1,23 +1,35 @@
-import { ensurePreviewHost, resolvePreviewHostsManifest } from "@forge/core";
-import { getProjectRoot, getWorkspaceRoot } from "@/lib/config";
+import { getProjectRoot } from "@/lib/config";
+import { resolvePreviewBackendOrigin } from "@/lib/preview-backend";
+import { NextResponse } from "next/server";
 
-async function resolveBackendOrigin(request: Request, agentRoot: string): Promise<string> {
-  const workspaceRoot = getWorkspaceRoot();
-  const manifest = resolvePreviewHostsManifest(workspaceRoot);
-  const primaryRoot = manifest?.primaryRoot ?? process.env.FORGE_PROJECT_ROOT;
-  const host = await ensurePreviewHost(agentRoot, primaryRoot, workspaceRoot);
-
-  if (!host) {
-    return new URL(request.url).origin;
-  }
-
-  return host;
-}
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 async function proxyRequest(request: Request, pathSegments: string[]): Promise<Response> {
-  const agentRoot = await getProjectRoot();
-  const backendOrigin = await resolveBackendOrigin(request, agentRoot);
   const incoming = new URL(request.url);
+
+  let agentRoot: string;
+  try {
+    agentRoot = await getProjectRoot();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return NextResponse.json({ error: message }, { status: 503 });
+  }
+
+  let backendOrigin: string;
+  try {
+    backendOrigin = await resolvePreviewBackendOrigin(agentRoot, incoming.origin);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return NextResponse.json(
+      {
+        error: message,
+        hint: "Run `forge dev -p <agent-dir>` and ensure `npm install` completed in the agent project.",
+      },
+      { status: 502 },
+    );
+  }
+
   const targetPath = pathSegments.join("/");
   const targetUrl = `${backendOrigin.replace(/\/+$/, "")}/${targetPath}${incoming.search}`;
 
@@ -36,15 +48,26 @@ async function proxyRequest(request: Request, pathSegments: string[]): Promise<R
     init.duplex = "half";
   }
 
-  const response = await fetch(targetUrl, init);
-  const responseHeaders = new Headers(response.headers);
-  responseHeaders.delete("transfer-encoding");
+  try {
+    const response = await fetch(targetUrl, init);
+    const responseHeaders = new Headers(response.headers);
+    responseHeaders.delete("transfer-encoding");
 
-  return new Response(response.body, {
-    status: response.status,
-    statusText: response.statusText,
-    headers: responseHeaders,
-  });
+    return new Response(response.body, {
+      status: response.status,
+      statusText: response.statusText,
+      headers: responseHeaders,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return NextResponse.json(
+      {
+        error: `Eve preview unreachable: ${message}`,
+        hint: "Run `forge dev` from your agent directory or run `npm install` in the project.",
+      },
+      { status: 502 },
+    );
+  }
 }
 
 type RouteContext = { params: Promise<{ path: string[] }> };

@@ -16,6 +16,7 @@
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
     "@forge/core": "workspace:*",
+    "@forge/scaffolder": "workspace:*",
     "@radix-ui/react-slot": "^1.3.0",
     "@tailwindcss/postcss": "^4.3.1",
     "ai": "7.0.0-beta.178",

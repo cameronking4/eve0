@@ -1,326 +1,224 @@
 # Forge
 
-**The visual builder for [Eve](https://vercel.com/eve) agents.**
+**Visual builder and scaffolder for [Eve](https://vercel.com/eve) agents.**
 
-Forge is a local-first tool that lets you describe an agent in plain English, scaffold a complete Eve project, edit it in a visual studio, preview it in a live chat, and export production-ready files — all without inventing a parallel config format. Every change writes real files under `agent/` that Eve understands natively.
+> `forge scaffold "Monitor Stripe chargebacks…"` → live wizard → review what was built → edit in Studio → ship with Eve.
 
-Think of it as **tweakcn for Eve**: you work directly on the filesystem structure Eve already uses.
+Forge does **not** invent a parallel project format. **Eve owns the shell** (`package.json`, `tsconfig`, channels, runtime, validation, ship commands). **Forge owns semantics** (natural-language plans, instructions/tools/skills content, visual editing, staging, export docs, scaffold UX). Every Forge capability that Eve already exposes runs through `eve` under the hood.
 
 ---
 
-## What Forge does
+## Two tools, one platform
 
-| Capability | What you get |
-|------------|--------------|
-| **NL scaffold** | Describe an agent → full `agent/`, `evals/`, `.env.example` on disk |
-| **Visual editor** | Edit instructions, skills, tools, approvals, channels from a browser UI |
-| **Live preview** | Chat with your agent using Eve's `useEveAgent` hook (same as [web-chat-next](https://github.com/vercel/eve/tree/main/apps/templates/web-chat-next)) |
-| **Security view** | See every tool, channel, and schedule color-coded by risk |
-| **Export** | Drop-in `agent/` bundle with `README.md` and `SECURITY.md` |
+| Surface | Eve (platform) | Forge (accelerator) |
+|---------|----------------|---------------------|
+| Project shape | `eve init`, `package.json`, `tsconfig`, `agent/channels/eve.ts` | — |
+| Runtime / preview | `withEve`, `eve dev`, `/eve/v1/*` session API | Studio chat via `/api/eve-proxy` + `useEveAgent` |
+| Validation | `eve info --json` (source of truth) | Same diagnostics in Studio + `forge info` |
+| Ship | `eve link`, `eve build`, `eve deploy`, `eve eval` | `forge link/deploy/eval/…` passthrough + Overview actions |
+| Agent content | Files on disk under `agent/` | NL scaffold, editors, staging, trust view |
+| Create agent | `eve init` (blank shell) | `forge scaffold` (describe → wizard → filled agent) |
+| Edit agent | Any editor | Forge Studio (panels, file tree, preview) |
 
-Forge does **not** replace Eve. It sits on top of Eve's CLI, discovery manifest, and session API.
+---
+
+## Paths (pick yours)
+
+| Path | Flow |
+|------|------|
+| **A — Blank Eve shell** | `forge init my-agent` → `cd my-agent && forge dev` → describe agent in onboarding wizard |
+| **B — Describe from scratch** | `forge scaffold "…" -o ./my-agent` → wizard progress → review → dashboard |
+| **C — Existing agent** | `cd my-agent && forge dev` → Studio loads manifest from `eve info` |
+| **D — Monorepo workspace** | `forge dev -p ./monorepo --workspace` → agent switcher + preview pool |
 
 ---
 
 ## Requirements
 
-- **Node.js 20+** (Eve recommends 24+ for production; 20 works for local dev)
-- **pnpm 9+** (`corepack enable`)
-- **Eve** — installed in each agent project (`eve` npm package; Forge runs `npx eve@latest` where needed)
-- **Model access** for preview/chat — set in the Eve project's `.env.local` (e.g. `AI_GATEWAY_API_KEY` or Vercel OIDC via `eve link`)
-- **Optional:** `OPENAI_API_KEY` or `AI_GATEWAY_API_KEY` at the Forge repo root for open-ended NL scaffolding beyond built-in examples
+- **Node.js 20+** (Eve recommends 24+ for production)
+- **pnpm 9+** or **npm** (Eve projects use either; Forge scaffolds via pinned `eve@0.11.4`)
+- **Model access** — `AI_GATEWAY_API_KEY` or `OPENAI_API_KEY` for NL scaffold; agent project `.env.local` for preview chat
+
+```bash
+cp .env.example .env.local
+# Set ONE of: AI_GATEWAY_API_KEY, OPENAI_API_KEY
+```
 
 ---
 
-## Install Forge
-
-Clone and build from source:
+## Install
 
 ```bash
 git clone https://github.com/cameronking4/eve0.git forge
 cd forge
 pnpm install
 pnpm build
-```
-
-Link the CLI globally (optional):
-
-```bash
-cd forge
-pnpm build
-pnpm link --global   # then `forge` works everywhere
-```
-
-Or always run via pnpm from the forge repo:
-
-```bash
-pnpm forge <command>
+pnpm link --global   # optional: `forge` on PATH
 ```
 
 ---
 
-## Quick start (5 minutes)
+## Quick start
 
-### 1. Scaffold an agent from natural language
-
-```bash
-cd forge
-pnpm forge scaffold \
-  "Monitor Stripe chargebacks over \$500, alert Slack before auto-responding to disputes" \
-  -o ~/my-chargeback-agent
-```
-
-This writes a complete Eve project:
-
-```
-my-chargeback-agent/
-├── agent/
-│   ├── agent.ts
-│   ├── instructions.md
-│   ├── tools/          # stripe-disputes, stripe-respond, slack-notify
-│   ├── skills/         # chargeback-triage, evidence-builder
-│   ├── channels/       # slack
-│   └── schedules/      # dispute-monitor (every 15 min)
-├── evals/
-│   ├── evals.config.ts
-│   └── smoke.eval.ts
-├── package.json
-└── .env.example
-```
-
-The Stripe chargeback example works **offline** (no LLM call). Other prompts need an API key.
-
-### 2. Install Eve in the agent project
+### Scaffold (wizard-first)
 
 ```bash
-cd ~/my-chargeback-agent
-pnpm install   # or npm install
+forge scaffold \
+  "Monitor Stripe chargebacks over \$500, alert Slack before responding" \
+  -o ~/my-agent
 ```
 
-Copy env vars and add your keys:
+Opens **http://localhost:4000/scaffold** — live stepper (`eve init` → plan → content → channels → validate) → review screen → **Continue to dashboard**.
+
+Use **`--sync`** for headless/CI (no browser):
 
 ```bash
+forge scaffold "…" -o ~/my-agent --sync
+```
+
+The Stripe chargeback example works **offline** (no LLM). Other prompts need `AI_GATEWAY_API_KEY` or `OPENAI_API_KEY`.
+
+### Dev + Studio
+
+```bash
+cd ~/my-agent
+npm install          # or pnpm install — Eve must be in node_modules
 cp .env.example .env.local
-# Edit .env.local — add STRIPE_SECRET_KEY, SLACK_BOT_TOKEN, model gateway key, etc.
+forge dev            # or: cd forge && forge dev -p ~/my-agent
 ```
-
-### 3. Open Forge Studio + live preview
-
-From the Forge repo (uses your last scaffolded agent automatically):
-
-```bash
-cd ~/Projects/forge
-pnpm forge dev
-```
-
-Or run from inside the agent directory:
-
-```bash
-cd ~/my-chargeback-agent
-pnpm forge dev   # if forge is on your PATH, or use pnpm exec forge dev
-```
-
-Override detection with `-p` when needed: `pnpm forge dev -p ~/other-agent`
-
-Your browser opens **http://localhost:4000**.
 
 | URL | Purpose |
 |-----|---------|
-| http://localhost:4000 | Visual editor (file tree, panels, diagnostics) |
-| http://localhost:4000/preview | Full-screen agent chat preview |
-| Editor → **Preview** tab | Embedded chat alongside the editor |
+| http://localhost:4000 | Studio dashboard |
+| http://localhost:4000/scaffold | Scaffold / onboarding wizard |
+| http://localhost:4000/preview | Full-screen chat |
+| Bottom-right chat icon | Inline preview while editing |
 
-To open the chat preview directly on launch:
-
-```bash
-pnpm forge dev --preview
-```
-
-### 4. Edit, preview, export
-
-1. Change the **$500 threshold** in **Instructions**
-2. Toggle **approval gates** on tools in the **Tools** panel
-3. **Extract a skill** — select text in Instructions → "Extract to skill"
-4. Chat in **Preview** to test behavior
-5. **Export** when ready:
-
-```bash
-pnpm forge export ./release
-```
+**Onboarding:** If you run `forge dev` with no Eve agent, or a blank `eve init` shell, Studio opens the describe-your-agent flow automatically (same pipeline as `forge scaffold`).
 
 ---
 
-## Alternative: start from an empty Eve project
+## Scaffold pipeline
 
-```bash
-pnpm forge init my-agent
-cd my-agent
-pnpm install
-cd /path/to/forge
-pnpm forge dev
+Forge CLI (`--sync`) and Studio wizard call the **same** `runScaffoldPipeline`:
+
+```
+1. prepare        Resolve output dir; refuse non-empty unless --force
+2. eve init       Pinned eve init (Forge never writes package.json/tsconfig)
+3. install deps   npm/pnpm fallback if init install fails
+4. plan           NL → ScaffoldPlan (example | llm | offline)
+5. apply content  instructions, tools, skills, evals, .env.example, CONNECTIONS.md
+6. channels       eve channels add slack/web (-y); non-fatal on failure
+7. validate       eve info --json
+8. repair         Optional LLM fix (max 1 pass)
+9. finalize       Session result + last-project hint
 ```
 
-Or add Eve to an existing app with `npx eve@latest init .` and open Forge against that directory.
+Resulting tree = **`eve init` + Forge content only** (see `packages/scaffolder/fixtures/eve-init-baseline/DELTA.md`).
 
 ---
 
 ## CLI reference
 
-All commands accept `-p, --project <path>` to target an Eve project root (directory containing `agent/`).
+All commands accept `-p, --project <path>` (and `--agent` in workspaces).
+
+| Command | Under the hood | Notes |
+|---------|----------------|-------|
+| `forge init [name]` | `eve init` | `--web` adds Next.js web channel |
+| `forge scaffold "<prompt>"` | pipeline above | Default: opens wizard; `--sync` for CI |
+| `forge dev` | Studio + Eve preview | Onboarding when agent missing/blank |
+| `forge info` | `eve info --json` | `--json` for scripting |
+| `forge export [path]` | read manifest + copy tree | Blocked on `[error]` diagnostics in Studio |
+| `forge doctor` | `eve info` + baseline checks | Non-destructive alignment report |
+| `forge eval` | `eve eval` | Passthrough; e.g. `--list` |
+| `forge build` | `eve build` | Passthrough |
+| `forge start` | `eve start` | Passthrough |
+| `forge link` | `eve link` | Interactive TTY |
+| `forge deploy` | `eve deploy` | Passthrough |
+| `forge channels` | `eve channels` | e.g. `add slack -y` |
+| `forge agents` | filesystem discovery | `--workspace` for monorepos |
+
+Examples:
 
 ```bash
-forge init [name]
+forge doctor -p ./my-agent
+forge eval --list -p ./my-agent
+forge deploy -p ./my-agent
+forge info --json -p ./my-agent
 ```
-Scaffolds a new Eve project via `npx eve@latest init`.
-
-```bash
-forge scaffold "<description>" [-o ./output-dir]
-```
-Natural language → full project tree. Built-in example: Stripe chargebacks + Slack.
-
-```bash
-forge dev [-p <project>] [--port 4000] [--preview] [--no-open]
-```
-Starts Forge Studio. Eve runs **inside** the Next.js dev server via `withEve()` — no separate `eve dev` terminal needed.
-
-| Flag | Default | Description |
-|------|---------|-------------|
-| `-p, --project` | current directory | Eve project root |
-| `--port` | `4000` | Studio port |
-| `--preview` | off | Open `/preview` instead of editor |
-| `--no-open` | off | Don't launch browser |
-
-```bash
-forge export [destination] [-p <project>]
-```
-Copies `agent/`, `evals/`, `.env.example`, plus generated `README.md` and `SECURITY.md`.
-
-```bash
-forge info [-p <project>] [--json]
-```
-Prints Eve's discovery manifest (tools, skills, channels, diagnostics).
 
 ---
 
-## Studio guide
+## Studio
 
-Forge Studio is a three-column layout:
+Three-column layout: file tree · editor panels · manifest/diagnostics.
 
-```
-┌──────────────┬────────────────────────────┬──────────────┐
-│  File tree   │       Editor panel         │  Manifest    │
-│  agent/      │  (context-sensitive)       │  Diagnostics │
-│  evals/      │                            │              │
-└──────────────┴────────────────────────────┴──────────────┘
-```
+| Panel | Disk |
+|-------|------|
+| Overview | Model picker, Link/Deploy shortcuts |
+| Instructions | `agent/instructions.md` |
+| Skills | `agent/skills/*.md` |
+| Tools | `agent/tools/*.ts` approvals, debug, flow |
+| Channels | `eve channels` + verify Eve channel |
+| Schedules | `agent/schedules/*.ts` |
+| Evals | `eve eval` results |
+| Security | Trust graph from manifest |
+| Export | Bundle + README/SECURITY |
 
-### Panels
-
-| Panel | Edits on disk |
-|-------|----------------|
-| **Overview** | `agent/agent.ts` model picker |
-| **Instructions** | `agent/instructions.md` |
-| **Skills** | `agent/skills/*.md` (YAML frontmatter) |
-| **Tools** | `agent/tools/*.ts` approval toggles, create stubs |
-| **Channels** | Lists `agent/channels/*`, `agent/schedules/*` |
-| **Security** | Read-only risk graph; one-click approval gates |
-| **Preview** | Live chat via `useEveAgent` |
-| **Export** | Writes export bundle to disk |
-
-### Instructions → Skills splitter
-
-1. Open **Instructions**
-2. Select a paragraph of domain knowledge
-3. Enter a skill slug and description
-4. Click **Extract to skill**
-
-Forge creates `agent/skills/<slug>.md` and removes that section from `instructions.md`.
-
-### Tool approvals
-
-In **Tools**, set approval mode per tool:
-
-- **None** — runs without human gate
-- **Always** — requires approval every time (`needsApproval: always()`)
-- **Once** — first call only
-- **Never** — explicitly disabled gate
-
-Destructive tools scaffolded by Forge (e.g. `stripe-respond`) default to **Always**.
+**Staging:** Edits land in `.forge/staging/` until published to disk. Preview chat reads staged files.
 
 ---
 
 ## How preview works
 
-Forge Studio uses Eve's official Next.js integration:
+1. Chat uses `useEveAgent({ host: "/api/eve-proxy" })` — all preview traffic goes through Studio.
+2. The proxy health-checks `withEve` on the Studio origin when available.
+3. If Eve isn't running there (onboarding handoff, failed install, etc.), Forge spawns `eve dev --no-ui` for that agent automatically.
 
-1. `withEve()` in `next.config.ts` points at your project via `FORGE_PROJECT_ROOT`
-2. On `forge dev`, Eve boots alongside Next.js and serves `/eve/v1/*` on the same origin
-3. The preview UI calls `useEveAgent()` from `eve/react` — identical to the [web-chat-next template](https://github.com/vercel/eve/tree/main/apps/templates/web-chat-next)
-
-You get streaming replies, tool call cards, reasoning blocks, and approval buttons in the chat — not a simplified mock.
-
-**Preview needs a working model.** Ensure `.env.local` in your agent project has valid AI Gateway / provider credentials before chatting.
-
-**First `forge dev` may take ~30s** while Eve compiles artifacts and installs the `microsandbox` sandbox adapter. If the agent preview shows "unavailable", stop and restart `forge dev` once `pnpm install` has finished — Eve rebuilds when `package.json` changes during first boot.
+Ensure `.env.local` in the **agent project** has model credentials before chatting.
 
 ---
 
-## How scaffolding works
+## Health check
 
-```
-Your prompt
-    ↓
-Structured plan (tools, skills, channels, schedules, instructions)
-    ↓
-Template codegen → writes real Eve TypeScript/Markdown files
-    ↓
-eve info validation (diagnostics surfaced in CLI + Studio)
+```bash
+forge doctor -p ./my-agent
 ```
 
-- **Offline examples:** prompts mentioning Stripe + chargebacks use a built-in plan (no API key)
-- **Open-ended prompts:** require `OPENAI_API_KEY` or `AI_GATEWAY_API_KEY` in Forge's environment
-- **Approval defaults:** tools with write/send/delete/refund/respond in the description get `needsApproval: always()`
+Reports:
+
+- Eve project structure vs `eve init` baseline (required files, tsconfig, dependencies)
+- Blank vs ready agent state
+- `eve info` diagnostics
+- Channel alignment (disk vs manifest)
+
+Exit code `1` when error-severity findings exist.
 
 ---
 
-## Environment variables
-
-### Forge dev (`forge dev`)
+## Environment
 
 | Variable | Set by | Purpose |
 |----------|--------|---------|
-| `FORGE_PROJECT_ROOT` | CLI | Absolute path to Eve project |
-| `FORGE_AGENT_NAME` | CLI | Display name in preview header |
-
-### Agent project (your Eve app)
-
-| Variable | Purpose |
-|----------|---------|
-| `AI_GATEWAY_API_KEY` | Model access via Vercel AI Gateway |
-| `VERCEL_OIDC_TOKEN` | OIDC auth when linked to Vercel |
-| Per-tool keys | See `.env.example` in scaffolded projects |
-
-### Forge repo (NL scaffolding only)
-
-| Variable | Purpose |
-|----------|---------|
-| `OPENAI_API_KEY` | LLM plan generation for custom prompts |
-| `AI_GATEWAY_API_KEY` | Alternative for plan generation |
+| `FORGE_PROJECT_ROOT` | `forge dev` | Active Eve agent path |
+| `FORGE_WORKSPACE_ROOT` | `forge dev` | Monorepo workspace |
+| `FORGE_ONBOARDING_CWD` | `forge dev` / scaffold | Default output dir for onboarding |
+| `FORGE_EVE_VERSION` | optional | Override pinned Eve for bootstrap (default `0.11.4`) |
+| `AI_GATEWAY_API_KEY` | you | NL scaffold + agent chat |
 
 ---
 
-## Project structure (Forge repo)
+## Repo layout
 
 ```
 forge/
-├── apps/studio/          # Next.js visual editor + preview
+├── apps/studio/          # Next.js Studio + scaffold wizard + /api/eve-proxy
 ├── packages/
 │   ├── cli/              # forge binary
-│   ├── core/             # filesystem adapter, writers, export
-│   └── scaffolder/       # NL → Eve codegen
-├── templates/
-│   └── minimal-agent/    # fallback scaffold
-└── scripts/e2e.sh        # smoke test
+│   ├── core/             # runEve, manifest, doctor, preview pool
+│   └── scaffolder/       # runScaffoldPipeline (CLI + wizard)
+├── packages/scaffolder/fixtures/eve-init-baseline/   # contract snapshot
+└── scripts/e2e.sh
 ```
 
 ---
@@ -328,16 +226,9 @@ forge/
 ## Development
 
 ```bash
-# Build everything
 pnpm build
-
-# Typecheck
 pnpm typecheck
-
-# E2E: scaffold Stripe agent + export
-pnpm test:e2e
-
-# Run studio alone (needs FORGE_PROJECT_ROOT)
+pnpm test:e2e          # scaffold --sync → info → export → eval --list
 FORGE_PROJECT_ROOT=~/my-agent pnpm studio
 ```
 
@@ -345,28 +236,20 @@ FORGE_PROJECT_ROOT=~/my-agent pnpm studio
 
 ## Troubleshooting
 
-**"Could not run eve info" in diagnostics**  
-Run `pnpm install` in your agent project so `eve` is in `node_modules`.
+**Chat: "Preview unavailable" / Load failed**  
+Run `npm install` in the agent project. Restart `forge dev` from the agent directory. Run `forge doctor` for details.
 
-**Preview: "Dev server is unavailable"**  
-Port 4000 is the Forge editor (Next.js). Chat goes through Eve's dev server at `/eve/v1/*`, which boots inside `forge dev`. If Eve crashed or left a stale process from an earlier run, stop `forge dev` (Ctrl+C) and start it again — Forge now clears stale Eve workers on startup. Wait up to ~30s on first boot while Eve compiles.
+**`eve init` install failed (pnpm "packages field missing")**  
+Forge retries with `npm install` during scaffold. Run `npm install` manually if needed.
 
-**Preview shows errors / no response**  
-Check `.env.local` in the **agent project** (not just the Forge repo) for `AI_GATEWAY_API_KEY` or another model provider key.
+**NL scaffold uses offline template**  
+Set `AI_GATEWAY_API_KEY` or `OPENAI_API_KEY` in Forge repo `.env.local`.
 
-**NL scaffold fails**  
-Use the Stripe chargeback example to verify the pipeline, or set `OPENAI_API_KEY` for custom prompts.
+**Export blocked**  
+Fix `[error]` diagnostics from `forge info` or `forge doctor` first.
 
 **Port 4000 in use**  
 `forge dev --port 4001`
-
----
-
-## What Forge does not do (yet)
-
-- Hosted SaaS / cloud deploy (export and use `vercel deploy` on the Eve project)
-- Full eval workbench UI (eval files are visible; use `eve eval` in the agent project)
-- Marketplace / agent gallery
 
 ---
 

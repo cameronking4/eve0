@@ -1,8 +1,5 @@
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
-import { writeProjectFile, readProjectFile } from "../tree.js";
-
-const execFileAsync = promisify(execFile);
+import { runEve } from "../eve-cli.js";
+import { fetchEveInfo } from "../manifest.js";
 
 export const CHANNEL_CATALOG = [
   {
@@ -27,44 +24,21 @@ export const CHANNEL_CATALOG = [
   },
 ] as const;
 
-const EVE_CHANNEL_TEMPLATE = `import { eveChannel } from "eve/channels/eve";
-import { localDev, placeholderAuth, vercelOidc } from "eve/channels/auth";
-
-export default eveChannel({
-  auth: [
-    localDev(),
-    vercelOidc(),
-    placeholderAuth(),
-  ],
-});
-`;
-
-export async function ensureEveChannel(projectRoot: string): Promise<{ path: string; created: boolean }> {
-  const path = "agent/channels/eve.ts";
-  try {
-    await readProjectFile(projectRoot, path);
-    return { path, created: false };
-  } catch {
-    await writeProjectFile(projectRoot, path, EVE_CHANNEL_TEMPLATE);
-    return { path, created: true };
-  }
-}
+/** Channel kinds Forge can create via `eve channels add`. Keep in sync with Eve. */
+export const EVE_CLI_CHANNEL_KINDS = ["slack", "web"] as const;
+export type EveCliChannelKind = (typeof EVE_CLI_CHANNEL_KINDS)[number];
 
 export async function addChannelViaEveCli(
   projectRoot: string,
-  kind: "slack" | "web",
+  kind: EveCliChannelKind,
 ): Promise<{ ok: boolean; stdout: string; stderr: string }> {
   try {
-    const { stdout, stderr } = await execFileAsync(
-      "npx",
-      ["eve", "channels", "add", kind, "-y"],
-      {
-        cwd: projectRoot,
-        maxBuffer: 10 * 1024 * 1024,
-        env: process.env,
-      },
-    );
-    return { ok: true, stdout, stderr };
+    const { stdout, stderr, exitCode } = await runEve({
+      cwd: projectRoot,
+      args: ["channels", "add", kind, "-y"],
+      maxBuffer: 10 * 1024 * 1024,
+    });
+    return { ok: exitCode === 0, stdout, stderr };
   } catch (error) {
     const err = error as { stdout?: string; stderr?: string; message?: string };
     return {
@@ -73,6 +47,18 @@ export async function addChannelViaEveCli(
       stderr: err.stderr ?? err.message ?? String(error),
     };
   }
+}
+
+/**
+ * P3/P4: the Eve channel is created by `eve init`, never by a Forge template.
+ * Verify it exists by asking the authoritative manifest.
+ */
+export async function verifyEveChannel(
+  projectRoot: string,
+): Promise<{ present: boolean; channels: string[] }> {
+  const manifest = await fetchEveInfo(projectRoot);
+  const channels = manifest.channels.map((c) => c.id);
+  return { present: channels.includes("eve"), channels };
 }
 
 export async function listChannelFiles(projectRoot: string): Promise<string[]> {

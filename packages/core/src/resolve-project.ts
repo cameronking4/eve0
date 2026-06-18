@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { discoverEveAgents, isForgeWorkspaceRoot, type DiscoveredAgent } from "./discover-agents.js";
@@ -14,6 +14,55 @@ export function isEveProjectRoot(dir: string): boolean {
     existsSync(join(root, "agent", "agent.ts")) ||
     (existsSync(join(root, "agent")) && existsSync(join(root, "package.json")))
   );
+}
+
+/** True when Eve is installed locally and the project can run `eve dev` / withEve. */
+export function isRunnableEveAgent(dir: string): boolean {
+  const root = expandHome(dir);
+  return isEveProjectRoot(root) && existsSync(join(root, "node_modules", "eve", "package.json"));
+}
+
+/** True when a directory has authored files of a given extension. */
+function dirHasFiles(dir: string, ext: string): boolean {
+  try {
+    return readdirSync(dir).some((f) => f.endsWith(ext));
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * A "blank" agent is a fresh `eve init` shell: placeholder instructions and no
+ * authored tools or skills. Used to offer the describe-your-agent onboarding.
+ * Disk-based so it works before `eve` is installed/run.
+ */
+export function isBlankEveAgent(dir: string): boolean {
+  const root = expandHome(dir);
+  if (!isEveProjectRoot(root)) return false;
+
+  if (dirHasFiles(join(root, "agent", "tools"), ".ts")) return false;
+  if (dirHasFiles(join(root, "agent", "skills"), ".md")) return false;
+
+  try {
+    const content = readFileSync(join(root, "agent", "instructions.md"), "utf-8").trim();
+    const normalized = content.toLowerCase().replace(/\s+/g, " ");
+    return (
+      normalized === "" ||
+      normalized.includes("you are a helpful assistant") ||
+      normalized === "# identity"
+    );
+  } catch {
+    return true;
+  }
+}
+
+export type EveAgentState = "missing" | "blank" | "ready";
+
+/** Classify a directory for the onboarding flow. */
+export function getEveAgentState(dir: string): EveAgentState {
+  const root = expandHome(dir);
+  if (!isEveProjectRoot(root)) return "missing";
+  return isBlankEveAgent(root) ? "blank" : "ready";
 }
 
 function forgeConfigDir(): string {
@@ -165,7 +214,13 @@ function selectAgentRoot(
   }
 
   const last = getLastForgeAgent(workspaceRoot);
-  if (last && agents.some((a) => a.root === last)) return last;
+  if (last && isRunnableEveAgent(last) && agents.some((a) => a.root === last)) {
+    return last;
+  }
+
+  const runnable = agents.filter((a) => isRunnableEveAgent(a.root));
+  if (runnable.length > 0) return runnable[0].root;
+
   return agents[0]?.root ?? workspaceRoot;
 }
 
