@@ -1,0 +1,277 @@
+.shell {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel);
+}
+
+.logo {
+  font-weight: 700;
+  font-size: 18px;
+  letter-spacing: -0.02em;
+}
+
+.subtitle {
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.projectPath {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--muted);
+  font-family: var(--mono);
+  max-width: 40%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.status {
+  font-size: 12px;
+  color: var(--success);
+}
+
+.body {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+.sidebar {
+  width: 220px;
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  overflow: auto;
+}
+
+.nav {
+  display: flex;
+  flex-direction: column;
+  padding: 8px;
+  gap: 2px;
+  border-bottom: 1px solid var(--border);
+}
+
+.navItem,
+.navActive {
+  text-align: left;
+  background: none;
+  border: none;
+  color: var(--muted);
+  padding: 8px 10px;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.navActive {
+  background: var(--border);
+  color: var(--text);
+}
+
+.tree {
+  padding: 12px;
+  flex: 1;
+  overflow: auto;
+}
+
+.treeTitle {
+  font-size: 11px;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+
+.treeList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.folder {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.fileBtn {
+  background: none;
+  border: none;
+  color: var(--text);
+  font-size: 12px;
+  font-family: var(--mono);
+  padding: 2px 0;
+  text-align: left;
+}
+
+.fileBtn:hover {
+  color: var(--accent);
+}
+
+.main {
+  flex: 1;
+  overflow: auto;
+  padding: 24px;
+}
+
+.main h2 {
+  margin-top: 0;
+  font-size: 20px;
+}
+
+.main h3 {
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.inspector {
+  width: 260px;
+  border-left: 1px solid var(--border);
+  padding: 16px;
+  overflow: auto;
+  background: var(--panel);
+}
+
+.inspector h3 {
+  font-size: 11px;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 16px 0 8px;
+}
+
+.stat {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+  margin-bottom: 6px;
+}
+
+.card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px;
+  margin-bottom: 12px;
+}
+
+.card pre {
+  font-size: 12px;
+  color: var(--muted);
+  overflow: hidden;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.muted {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.extractBox {
+  margin-top: 16px;
+  padding: 14px;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.statsGrid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+.statCard {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+  font-size: 14px;
+}
+
+.securityGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 12px;
+}
+
+.diag {
+  font-size: 12px;
+  padding: 6px 8px;
+  border-radius: 4px;
+  margin-bottom: 6px;
+  background: var(--border);
+}
+
+.diag.error {
+  background: #7f1d1d;
+}
+
+.diag.warning {
+  background: #78350f;
+}
+
+.chatLog {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  min-height: 200px;
+  max-height: 400px;
+  overflow: auto;
+  margin-bottom: 12px;
+  font-size: 13px;
+  font-family: var(--mono);
+}
+
+.previewLink {
+  margin-left: auto;
+  font-size: 13px;
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.previewLink:hover {
+  text-decoration: underline;
+}
+
+.previewSection {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 80px);
+  margin: -24px;
+  padding: 0;
+}
+
+.previewSectionHeader {
+  padding: 16px 24px 0;
+}
+
+.previewSectionHeader h2 {
+  margin: 0 0 4px;
+}
+
+.embeddedPreview {
+  flex: 1;
+  min-height: 0;
+  margin: 12px 24px 24px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+}

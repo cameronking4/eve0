@@ -1,0 +1,29 @@
+{
+  "name": "forge",
+  "private": true,
+  "version": "0.1.0",
+  "description": "The Cursor/v0 for Eve agents — local visual editor and NL scaffolder",
+  "scripts": {
+    "build": "pnpm --filter @forge/core build && pnpm --filter @forge/scaffolder build && pnpm --filter @forge/cli build && pnpm --filter @forge/studio build && pnpm --filter minimal-agent build",
+    "dev": "node packages/cli/dist/index.js dev",
+    "forge": "node packages/cli/dist/index.js",
+    "studio": "pnpm --filter @forge/studio dev",
+    "typecheck": "pnpm -r typecheck",
+    "test:e2e": "bash scripts/e2e.sh"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "pnpm@9.15.0",
+  "pnpm": {
+    "overrides": {
+      "zod": "^4.4.3"
+    }
+  },
+  "devDependencies": {
+    "@forge/cli": "workspace:*"
+  },
+  "bin": {
+    "forge": "./packages/cli/dist/index.js"
+  }
+}

@@ -1,0 +1,46 @@
+{
+  "appRoot": "/private/tmp/eve-baseline/baseline-agent",
+  "agentRoot": "/private/tmp/eve-baseline/baseline-agent/agent",
+  "layout": "nested",
+  "status": "ready",
+  "diagnostics": {
+    "errors": 0,
+    "warnings": 0
+  },
+  "model": "anthropic/claude-sonnet-4.6",
+  "instructions": "instructions.md",
+  "skills": [],
+  "tools": [],
+  "channels": [
+    {
+      "name": "eve",
+      "kind": "http",
+      "method": "POST",
+      "urlPath": "/eve/v1/session"
+    },
+    {
+      "name": "eve",
+      "kind": "http",
+      "method": "POST",
+      "urlPath": "/eve/v1/session/:sessionId"
+    },
+    {
+      "name": "eve",
+      "kind": "http",
+      "method": "GET",
+      "urlPath": "/eve/v1/session/:sessionId/stream"
+    }
+  ],
+  "messaging": {
+    "create": "/eve/v1/session",
+    "continue": "/eve/v1/session/:sessionId",
+    "stream": "/eve/v1/session/:sessionId/stream"
+  },
+  "artifacts": {
+    "compiledManifest": "/private/tmp/eve-baseline/baseline-agent/.eve/compile/compiled-agent-manifest.json",
+    "discoveryManifest": "/private/tmp/eve-baseline/baseline-agent/.eve/discovery/agent-discovery-manifest.json",
+    "diagnostics": "/private/tmp/eve-baseline/baseline-agent/.eve/discovery/diagnostics.json",
+    "moduleMap": "/private/tmp/eve-baseline/baseline-agent/.eve/compile/module-map.mjs",
+    "metadata": "/private/tmp/eve-baseline/baseline-agent/.eve/compile/compile-metadata.json"
+  }
+}
