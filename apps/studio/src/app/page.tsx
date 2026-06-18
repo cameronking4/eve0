@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { ExternalLink } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { ExternalLink, Loader2, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { ChannelsPanel } from "@/components/channels/channels-panel";
 import { SchedulesPanel } from "@/components/schedules/schedules-panel";
@@ -63,6 +64,42 @@ const OVERVIEW_STATS: Array<{
 ];
 
 export default function StudioPage() {
+  const router = useRouter();
+  const [gateChecked, setGateChecked] = useState(false);
+
+  // Onboarding redirect guard (R14): if there's no agent, the agent is a blank
+  // shell, or a scaffold session is mid-flight, send the user to the wizard.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/onboarding/state");
+        const state = await res.json();
+        if (cancelled) return;
+        if (state.mode === "missing" || state.mode === "blank") {
+          router.replace("/scaffold");
+          return;
+        }
+        if (state.activeSessionId) {
+          const sRes = await fetch(`/api/scaffold/session?id=${state.activeSessionId}`);
+          if (sRes.ok) {
+            const { session } = await sRes.json();
+            if (session && session.status !== "complete" && session.status !== "archived") {
+              router.replace("/scaffold");
+              return;
+            }
+          }
+        }
+      } catch {
+        // fall through to dashboard
+      }
+      if (!cancelled) setGateChecked(true);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [router]);
+
   const { activeRoot, agentName, previewHost, workspaceRoot, isLoading, isSwitching } =
     useProject();
   const { refresh: refreshStaging } = useStaging();
@@ -155,8 +192,23 @@ export default function StudioPage() {
       body: JSON.stringify({ path: exportPath }),
     });
     const data = await res.json();
-    if (data.error) toast.error(data.error);
-    else toast.success(`Exported ${data.files?.length ?? 0} files to ${data.outputPath}`);
+    if (data.error) {
+      if (data.diagnostics?.length) {
+        toast.error(`${data.error}\n${data.diagnostics.join("\n")}`);
+      } else {
+        toast.error(data.error);
+      }
+    } else {
+      toast.success(`Exported ${data.files?.length ?? 0} files to ${data.outputPath}`);
+    }
+  }
+
+  if (!gateChecked) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-background text-sm text-muted-foreground">
+        <Loader2 className="mr-2 size-4 animate-spin" /> Loading workspace…
+      </div>
+    );
   }
 
   return (
@@ -177,6 +229,13 @@ export default function StudioPage() {
         )}
         <div className="ml-auto flex items-center gap-2">
           <OpenAgentFolderButton className="hidden sm:inline-flex" />
+          <Link
+            href="/scaffold?new=1"
+            className={buttonVariants({ variant: "outline", size: "sm" })}
+          >
+            <Sparkles className="size-3.5" />
+            Create new agent
+          </Link>
           <Link
             href="/preview"
             target="_blank"
@@ -303,7 +362,7 @@ export default function StudioPage() {
       </div>
       <FloatingAgentChat
         key={activeRoot}
-        agentName={manifest?.name ?? agentName}
+        agentName={agentName || manifest?.name || "Agent"}
         eveHost={previewHost}
       />
     </div>
@@ -323,16 +382,52 @@ function Overview({
   onModelChange: (m: string) => void;
   onNavigate: (panel: StudioPanel) => void;
 }) {
+  const [deploying, setDeploying] = useState(false);
   const harness = new Set(["bash", "read_file", "write_file", "grep", "glob", "list_dir"]);
   const authoredTools = manifest.tools.filter((t) => !harness.has(t.name));
 
+  async function runDeploy() {
+    setDeploying(true);
+    try {
+      const res = await fetch("/api/ship", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "deploy" }),
+      });
+      const data = await res.json();
+      if (data.error) toast.error(data.error);
+      else if (data.ok) toast.success("Deploy finished");
+      else toast.error(`Deploy failed (exit ${data.exitCode})`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Deploy failed");
+    } finally {
+      setDeploying(false);
+    }
+  }
+
+  function copyLinkCommand() {
+    const cmd = projectRoot ? `forge link -p ${projectRoot}` : "forge link";
+    navigator.clipboard.writeText(cmd).catch(() => {});
+    toast.info(`Run in terminal: ${cmd}`);
+  }
+
   return (
     <section className="mx-auto m-4 max-w-3xl p-12 border rounded-lg bg-card space-y-6">
-      <div>
-        <h2 className="text-2xl font-semibold">{manifest.name ?? "Agent Overview"}</h2>
-        <p className="text-sm text-muted-foreground">
-          {projectRoot || "Local Eve agent"} — edit, stage, preview in chat, then publish.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-2xl font-semibold">{manifest.name ?? "Agent Overview"}</h2>
+          <p className="text-sm text-muted-foreground">
+            {projectRoot || "Local Eve agent"} — edit, stage, preview in chat, then publish.
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={copyLinkCommand}>
+            Link
+          </Button>
+          <Button size="sm" disabled={deploying} onClick={runDeploy}>
+            {deploying ? "Deploying…" : "Deploy"}
+          </Button>
+        </div>
       </div>
 
       <div className="space-y-2">

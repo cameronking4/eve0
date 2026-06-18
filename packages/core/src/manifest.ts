@@ -230,12 +230,10 @@ export function normalizeEveInfo(raw: Record<string, unknown>): EveManifest {
     asString(asRecord(agent.config)?.model) ??
     asString(raw.model);
 
-  const instructions = asString(raw.instructions);
   const name =
     asString(raw.name) ??
     asString(agent.name) ??
-    asString(raw.agentId) ??
-    (typeof instructions === "string" ? instructions.replace(/\.md$/, "") : undefined);
+    asString(raw.agentId);
 
   return {
     name,
@@ -351,30 +349,24 @@ function mergeManifests(info: EveManifest, discovery: EveManifest): EveManifest 
 
   return {
     ...info,
-    name: info.name ?? discovery.name,
     tools: info.tools.map((tool) => {
       const rich = toolByName.get(tool.name);
-      return rich
-        ? {
-            ...tool,
-            description: tool.description ?? rich.description,
-            sourcePath: tool.sourcePath ?? rich.sourcePath,
-          }
-        : tool;
+      if (!rich) return tool;
+      return {
+        ...tool,
+        description: tool.description ?? rich.description,
+        sourcePath: tool.sourcePath ?? rich.sourcePath,
+      };
     }),
     skills: info.skills.map((skill) => {
       const rich = skillById.get(skill.id);
-      return rich
-        ? {
-            ...skill,
-            description: skill.description ?? rich.description,
-            sourcePath: skill.sourcePath ?? rich.sourcePath,
-          }
-        : skill;
+      if (!rich) return skill;
+      return {
+        ...skill,
+        description: skill.description ?? rich.description,
+        sourcePath: skill.sourcePath ?? rich.sourcePath,
+      };
     }),
-    channels: discovery.channels.length ? discovery.channels : info.channels,
-    schedules: discovery.schedules.length ? discovery.schedules : info.schedules,
-    diagnostics: [...info.diagnostics, ...discovery.diagnostics],
   };
 }
 

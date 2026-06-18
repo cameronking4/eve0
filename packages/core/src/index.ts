@@ -1,5 +1,6 @@
 export * from "./types.js";
 export * from "./eve-cli.js";
+export * from "./scaffold-session.js";
 export * from "./manifest.js";
 export * from "./project.js";
 export * from "./discover-agents.js";
@@ -22,3 +23,4 @@ export * from "./writers/channel.js";
 export * from "./writers/schedule.js";
 export * from "./writers/agent.js";
 export * from "./writers/readme.js";
+export * from "./doctor.js";

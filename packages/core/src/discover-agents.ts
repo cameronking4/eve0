@@ -15,8 +15,8 @@ const SKIP_DIRS = new Set([
   ".vercel",
 ]);
 
-/** Subtrees that are never scanned for agents (scaffolds, examples, etc.). */
-const SKIP_AGENT_SUBTREES = new Set(["templates"]);
+/** Subtrees that are never scanned for agents (scaffolds, examples, test fixtures). */
+const SKIP_AGENT_SUBTREES = new Set(["templates", "fixtures"]);
 
 export interface DiscoveredAgent {
   root: string;

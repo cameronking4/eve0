@@ -10,7 +10,7 @@ import {
   watchWorkspaceAgents,
 } from "@forge/core";
 import { cookies } from "next/headers";
-import { resolve } from "node:path";
+import { basename, resolve } from "node:path";
 import { NextResponse } from "next/server";
 
 let workspaceWatcherStarted = false;
@@ -49,14 +49,28 @@ export async function GET() {
     const agents = isWorkspace && workspaceRoot ? await enrichAgents(workspaceRoot) : [];
     const previewHost = await resolveEvePreviewHost(activeRoot);
 
+    let agentName =
+      agents.find((a) => resolve(a.root) === resolve(activeRoot))?.name ?? null;
+    if (!agentName) {
+      agentName = process.env["FORGE_AGENT_NAME"] ?? null;
+      if (!agentName) {
+        try {
+          const info = await fetchEveInfo(activeRoot);
+          agentName = info.name ?? basename(activeRoot);
+        } catch {
+          agentName = basename(activeRoot);
+        }
+      }
+    }
+
     return NextResponse.json({
       workspaceRoot: workspaceRoot ?? null,
       activeRoot,
       isWorkspace,
       agents,
       previewHost: previewHost || null,
-      usePreviewProxy: isWorkspace,
-      agentName: agents.find((a) => resolve(a.root) === resolve(activeRoot))?.name ?? null,
+      usePreviewProxy: true,
+      agentName,
     });
   } catch (e) {
     return NextResponse.json(

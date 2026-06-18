@@ -1,49 +1,75 @@
 import { cookies } from "next/headers";
 import { resolve } from "node:path";
-import { discoverEveAgentsCached, isEveProjectRoot } from "@forge/core";
+import {
+  discoverEveAgentsCached,
+  getLastForgeProject,
+  isEveProjectRoot,
+} from "@forge/core";
 
 const AGENT_COOKIE = "forge-agent-root";
 
+/** Read at runtime — avoid Next inlining an empty build-time value in standalone bundles. */
+function forgeProjectRootEnv(): string | undefined {
+  return process.env["FORGE_PROJECT_ROOT"];
+}
+
+function forgeWorkspaceRootEnv(): string | undefined {
+  return process.env["FORGE_WORKSPACE_ROOT"];
+}
+
 function getAllowedAgentRoots(): string[] {
-  const workspace = process.env.FORGE_WORKSPACE_ROOT;
+  const workspace = forgeWorkspaceRootEnv();
   if (workspace) {
     return discoverEveAgentsCached(workspace).map((agent) => resolve(agent.root));
   }
 
-  const fallback = process.env.FORGE_PROJECT_ROOT;
-  return fallback ? [resolve(fallback)] : [];
+  const envRoot = forgeProjectRootEnv();
+  return envRoot && isEveProjectRoot(envRoot) ? [resolve(envRoot)] : [];
 }
 
 export async function getProjectRoot(): Promise<string> {
-  const fallback = process.env.FORGE_PROJECT_ROOT ?? process.cwd();
+  const envRoot = forgeProjectRootEnv();
   const allowed = getAllowedAgentRoots();
 
   const cookieStore = await cookies();
   const selected = cookieStore.get(AGENT_COOKIE)?.value;
   if (selected) {
     const resolved = resolve(selected);
-    if (allowed.length === 0) {
-      if (isEveProjectRoot(resolved)) return resolved;
-    } else if (allowed.includes(resolved)) {
+    if (!isEveProjectRoot(resolved)) {
+      // Stale cookie from a prior session — ignore it.
+    } else if (allowed.length === 0 || allowed.includes(resolved)) {
       return resolved;
     }
   }
 
+  if (envRoot) {
+    const resolved = resolve(envRoot);
+    if (isEveProjectRoot(resolved)) {
+      if (allowed.length === 0 || allowed.includes(resolved)) return resolved;
+    }
+  }
+
   if (allowed.length > 0) {
-    const resolvedFallback = resolve(fallback);
-    if (allowed.includes(resolvedFallback)) return resolvedFallback;
     return allowed[0];
   }
 
-  return fallback;
+  const last = getLastForgeProject();
+  if (last && isEveProjectRoot(last)) return last;
+
+  const cwd = process.cwd();
+  if (isEveProjectRoot(cwd)) return cwd;
+
+  throw new Error(
+    "No Eve agent project configured. Run `forge dev` from an agent directory or pass `-p <path>`.",
+  );
 }
 
 export function getWorkspaceRoot(): string | undefined {
-  return process.env.FORGE_WORKSPACE_ROOT;
+  return forgeWorkspaceRootEnv();
 }
 
 export { AGENT_COOKIE };
 
 export function getEveUrl(): string {
-  return process.env.FORGE_EVE_URL ?? "http://127.0.0.1:3000";
+  return process.env["FORGE_EVE_URL"] ?? "http://127.0.0.1:3000";
 }

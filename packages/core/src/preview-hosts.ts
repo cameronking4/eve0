@@ -1,9 +1,9 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { createRequire } from "node:module";
 import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { resolveEveInvocation } from "./eve-cli.js";
 import type { DiscoveredAgent } from "./discover-agents.js";
+import { isRunnableEveAgent } from "./resolve-project.js";
 
 const EVE_HEALTH_PATH = "/eve/v1/health";
 const SERVER_URL_PATTERN = /https?:\/\/[^\s"'<>]+/g;
@@ -19,12 +19,6 @@ export interface PreviewHostsManifest {
 }
 
 const runningProcesses = new Map<string, ChildProcess>();
-
-function findEveBinary(): string {
-  const require = createRequire(fileURLToPath(import.meta.url));
-  const pkgPath = require.resolve("eve/package.json");
-  return join(dirname(pkgPath), "bin/eve.js");
-}
 
 export function previewHostsManifestPath(workspaceRoot: string): string {
   return join(resolve(workspaceRoot), ".forge", MANIFEST_FILE);
@@ -92,7 +86,8 @@ export async function spawnEveDevServer(agentRoot: string): Promise<string> {
   if (existing) return existing;
 
   return new Promise((resolvePromise, reject) => {
-    const proc = spawn(process.execPath, [findEveBinary(), "dev", "--no-ui", "--port", "0"], {
+    const { cmd, prefix } = resolveEveInvocation(resolved);
+    const proc = spawn(cmd, [...prefix, "dev", "--no-ui", "--port", "0"], {
       cwd: resolved,
       stdio: ["ignore", "pipe", "pipe"],
       env: process.env,
@@ -169,7 +164,12 @@ export async function warmPreviewHosts(
       hosts[root] = "";
       continue;
     }
-    hosts[root] = await spawnEveDevServer(root);
+    if (!isRunnableEveAgent(root)) continue;
+    try {
+      hosts[root] = await spawnEveDevServer(root);
+    } catch {
+      // Non-fatal: lazy-spawn via /api/eve-proxy when the user switches agents.
+    }
   }
 
   const manifest: PreviewHostsManifest = {

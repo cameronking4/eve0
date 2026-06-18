@@ -10,6 +10,10 @@ build/
 .output/
 *.tsbuildinfo
 
+# Bundled standalone studio (tarball shipped via npm "files"; extracted on run)
+packages/cli/studio.tar.gz
+packages/cli/studio/
+
 # Environment & secrets
 .env
 .env.*

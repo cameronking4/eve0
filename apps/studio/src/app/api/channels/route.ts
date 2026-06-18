@@ -2,10 +2,10 @@ import { getProjectRoot } from "@/lib/config";
 import {
   addChannelViaEveCli,
   CHANNEL_CATALOG,
-  ensureEveChannel,
   listChannelFiles,
   readProjectFile,
   stageProjectFile,
+  verifyEveChannel,
 } from "@forge/core";
 import { NextResponse } from "next/server";
 
@@ -32,19 +32,17 @@ export async function POST(req: Request) {
     }
 
     if (body.kind === "eve") {
-      const result = await ensureEveChannel(root);
-      const staged: string[] = [];
-      if (result.created) {
-        const content = await readProjectFile(root, result.path);
-        await stageProjectFile(root, result.path, content);
-        staged.push(result.path);
-      }
+      // P3/P4: the Eve channel is owned by `eve init`. Forge only verifies it.
+      const { present, channels } = await verifyEveChannel(root);
       return NextResponse.json({
-        ok: true,
-        path: result.path,
-        created: result.created,
-        staged,
-        message: result.created ? "Eve channel staged." : "Eve channel already exists.",
+        ok: present,
+        path: "agent/channels/eve.ts",
+        created: false,
+        staged: [],
+        channels,
+        message: present
+          ? "Eve channel verified in eve info."
+          : "Eve channel not found. Run `forge init` to create the base project.",
       });
     }
 
