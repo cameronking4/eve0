@@ -22,7 +22,12 @@ export async function POST(req: Request) {
     loadProjectEnv(root);
 
     const body = (await req.json()) as { ids?: string[] };
-    const report = await runProjectEvals(root, body.ids);
+    const incoming = new URL(req.url);
+    const report = await runProjectEvals(root, body.ids, {
+      workspaceRoot: process.env["FORGE_WORKSPACE_ROOT"],
+      primaryRoot: process.env["FORGE_PROJECT_ROOT"],
+      studioOrigin: incoming.origin,
+    });
     return NextResponse.json(report);
   } catch (e) {
     return NextResponse.json(

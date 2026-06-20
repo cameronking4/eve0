@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { FileDiff, Loader2, RotateCcw, Upload } from "lucide-react";
 import { toast } from "sonner";
 import type { StagedFileEntry } from "@forge/core";
+import { isStagedDeletion } from "@/lib/staging-utils";
 import { DiffView } from "@/components/editor/diff-view";
 import { useStaging } from "@/context/staging-context";
 import { Badge } from "@/components/ui/badge";
@@ -148,11 +149,24 @@ export function StagingReviewDialog({
                     </div>
                   </div>
                   <div className="min-h-0 flex-1 p-3">
-                    <DiffView
-                      before={selected.published}
-                      after={selected.staged}
-                      className="h-full max-h-[calc(88vh-220px)]"
-                    />
+                    {isStagedDeletion(selected.staged) ? (
+                      <div className="flex h-full max-h-[calc(88vh-220px)] flex-col gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-4">
+                        <p className="text-sm font-medium text-destructive">Staged for deletion</p>
+                        <p className="text-sm text-muted-foreground">
+                          This file is removed from preview. Publish to delete permanently, or revert
+                          to restore the published version.
+                        </p>
+                        <pre className="min-h-0 flex-1 overflow-auto rounded-md border bg-background/80 p-3 font-mono text-xs">
+                          {selected.published || "(empty file)"}
+                        </pre>
+                      </div>
+                    ) : (
+                      <DiffView
+                        before={selected.published}
+                        after={selected.staged}
+                        className="h-full max-h-[calc(88vh-220px)]"
+                      />
+                    )}
                   </div>
                 </>
               ) : (
@@ -203,7 +217,8 @@ function FileListItem({
   active: boolean;
   onSelect: () => void;
 }) {
-  const changed = hasDiff(file.published, file.staged);
+  const deleted = isStagedDeletion(file.staged);
+  const changed = deleted || hasDiff(file.published, file.staged);
   const name = file.path.split("/").pop() ?? file.path;
 
   return (
@@ -219,7 +234,10 @@ function FileListItem({
     >
       <span className="truncate font-mono text-xs font-medium">{name}</span>
       <span className="truncate text-[10px] text-muted-foreground">{file.path}</span>
-      {changed && (
+      {deleted && (
+        <span className="mt-1 text-[10px] text-destructive">pending deletion</span>
+      )}
+      {changed && !deleted && (
         <span className="mt-1 text-[10px] text-emerald-400">
           +{countChanges(file)} lines
         </span>

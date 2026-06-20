@@ -1,8 +1,10 @@
 import { getProjectRoot } from "@/lib/config";
 import {
   readProjectFile,
+  renameAuthoredTool,
   scaffoldTool,
   stageProjectFile,
+  stageToolDeletion,
   writeToolApproval,
 } from "@forge/core";
 import type { ApprovalMode } from "@forge/core";
@@ -12,7 +14,9 @@ export async function POST(req: Request) {
   const body = (await req.json()) as
     | { action: "approval"; toolPath: string; mode: ApprovalMode }
     | { action: "create"; name: string; description: string; needsApproval?: boolean }
-    | { action: "gallery"; name: string; content: string };
+    | { action: "gallery"; name: string; content: string }
+    | { action: "rename"; sourcePath: string; newName: string }
+    | { action: "delete"; sourcePath: string };
 
   try {
     const root = await getProjectRoot();
@@ -28,6 +32,18 @@ export async function POST(req: Request) {
     } else if (body.action === "gallery") {
       const path = `agent/tools/${body.name}.ts`;
       await stageProjectFile(root, path, body.content);
+    } else if (body.action === "rename") {
+      if (!body.sourcePath || !body.newName?.trim()) {
+        return NextResponse.json({ error: "sourcePath and newName required" }, { status: 400 });
+      }
+      const result = await renameAuthoredTool(root, body.sourcePath, body.newName);
+      return NextResponse.json({ ok: true, ...result, staged: true });
+    } else if (body.action === "delete") {
+      if (!body.sourcePath) {
+        return NextResponse.json({ error: "sourcePath required" }, { status: 400 });
+      }
+      await stageToolDeletion(root, body.sourcePath);
+      return NextResponse.json({ ok: true, path: body.sourcePath, staged: true });
     }
     return NextResponse.json({ ok: true });
   } catch (e) {

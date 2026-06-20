@@ -288,6 +288,7 @@ export default function StudioPage() {
           {panel === "tools" && manifest && (
             <ToolsPanel
               tools={manifest.tools}
+              connections={manifest.connections}
               onRefresh={refresh}
               onOpenFile={openFile}
               onSetApproval={setApproval}
@@ -363,6 +364,7 @@ export default function StudioPage() {
       <FloatingAgentChat
         key={activeRoot}
         agentName={agentName || manifest?.name || "Agent"}
+        agentScope={activeRoot}
         eveHost={previewHost}
       />
     </div>

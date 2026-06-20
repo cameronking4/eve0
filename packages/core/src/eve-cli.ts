@@ -121,6 +121,9 @@ function hintForFailure(args: string[], stderr: string, combined: string): strin
   if (args[0] === "channels" && (text.includes("interactive") || text.includes("requires an explicit channel"))) {
     return "Interactive channel setup needed. Run `eve channels add <kind>` in a terminal.";
   }
+  if (args[0] === "eval" && text.includes("dev server is already running")) {
+    return "A preview dev server is already running. Forge should target it automatically — restart Studio if this persists.";
+  }
   if (args[0] === "link" && (text.includes("auth") || text.includes("login") || text.includes("tty"))) {
     return "Run `forge link` in a terminal with a TTY to complete Vercel auth.";
   }
@@ -192,13 +195,31 @@ export function runEve(opts: RunEveOptions): Promise<RunEveResult> {
       reject(error);
     });
 
-    child.on("exit", (code) => {
+    let exitCode: number | null = null;
+    let stdoutEnded = !child.stdout;
+    let stderrEnded = !child.stderr;
+
+    const finish = () => {
+      if (exitCode === null || !stdoutEnded || !stderrEnded) return;
       clearTimeout(timeout);
       if (lineBuf && opts.onLine) opts.onLine(lineBuf);
       if (overflow) {
         stderr += "\n[forge] output truncated (maxBuffer exceeded)";
       }
-      resolvePromise({ stdout, stderr, exitCode: code ?? 0 });
+      resolvePromise({ stdout, stderr, exitCode });
+    };
+
+    child.stdout?.on("end", () => {
+      stdoutEnded = true;
+      finish();
+    });
+    child.stderr?.on("end", () => {
+      stderrEnded = true;
+      finish();
+    });
+    child.on("exit", (code) => {
+      exitCode = code ?? 0;
+      finish();
     });
   });
 }
@@ -232,15 +253,44 @@ export async function runEveOrThrow(opts: RunEveOptions): Promise<RunEveResult> 
 
 /** Extract the first complete JSON object/array from CLI output (Eve prints a banner first). */
 export function extractJson(stdout: string): string {
-  const firstObj = stdout.indexOf("{");
-  const firstArr = stdout.indexOf("[");
+  const trimmed = stdout.trim();
+  if (!trimmed) return stdout;
+
+  const firstObj = trimmed.indexOf("{");
+  const firstArr = trimmed.indexOf("[");
   const candidates = [firstObj, firstArr].filter((i) => i >= 0);
-  if (candidates.length === 0) return stdout;
+  if (candidates.length === 0) return trimmed;
+
   const start = Math.min(...candidates);
-  const open = stdout[start];
-  const close = open === "{" ? "}" : "]";
-  const end = stdout.lastIndexOf(close);
-  return end > start ? stdout.slice(start, end + 1) : stdout.slice(start);
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+
+  for (let i = start; i < trimmed.length; i++) {
+    const ch = trimmed[i];
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (ch === "\\") {
+        escaped = true;
+      } else if (ch === '"') {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (ch === '"') {
+      inString = true;
+      continue;
+    }
+    if (ch === "{" || ch === "[") depth++;
+    if (ch === "}" || ch === "]") {
+      depth--;
+      if (depth === 0) return trimmed.slice(start, i + 1);
+    }
+  }
+
+  return trimmed.slice(start);
 }
 
 /** Run `eve <args> --json` and parse the result (banner-tolerant). */

@@ -19,7 +19,9 @@
     "dev": "tsc --watch"
   },
   "dependencies": {
+    "@ai-sdk/mcp": "2.0.0-beta.66",
     "chokidar": "^4.0.3",
+    "eve": "^0.11.4",
     "gray-matter": "^4.0.3",
     "jiti": "^2.7.0",
     "ts-morph": "^25.0.1"

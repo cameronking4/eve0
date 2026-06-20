@@ -10,6 +10,7 @@ import {
   type ReactNode,
 } from "react";
 import type { StagedFileEntry } from "@forge/core";
+import { isStagedDeletion } from "@/lib/staging-utils";
 import { useProject } from "@/context/project-context";
 
 interface StagingContextValue {
@@ -23,6 +24,7 @@ interface StagingContextValue {
   publishAll: () => Promise<void>;
   revertAll: () => Promise<void>;
   isStaged: (path: string) => boolean;
+  isStagedForDeletion: (path: string) => boolean;
 }
 
 const StagingContext = createContext<StagingContextValue | null>(null);
@@ -123,6 +125,8 @@ export function StagingProvider({ children }: { children: ReactNode }) {
       publishAll,
       revertAll,
       isStaged: (path: string) => files.some((f) => f.path === path),
+      isStagedForDeletion: (path: string) =>
+        files.some((f) => f.path === path && isStagedDeletion(f.staged)),
     }),
     [files, isLoading, refresh, stage, publish, revert, publishAll, revertAll],
   );

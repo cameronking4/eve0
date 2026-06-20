@@ -1,12 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { ExternalLink, Loader2, Plus, Radio } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { ExternalLink, Loader2, Plus, Radio, RotateCcw, Save, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import type { EveChannelInfo } from "@forge/core";
+import { isProtectedChannel } from "@/lib/channel-utils";
 import { useStaging } from "@/context/staging-context";
 
 type ChannelCatalogItem = {
@@ -28,7 +29,16 @@ export function ChannelsPanel({
 }) {
   const [catalog, setCatalog] = useState<ChannelCatalogItem[]>([]);
   const [adding, setAdding] = useState<string | null>(null);
-  const { refresh: refreshStaging, isStaged } = useStaging();
+  const [deleting, setDeleting] = useState<string | null>(null);
+  const [busyPath, setBusyPath] = useState<string | null>(null);
+  const {
+    files: stagedFiles,
+    refresh: refreshStaging,
+    isStaged,
+    isStagedForDeletion,
+    publish,
+    revert,
+  } = useStaging();
 
   const loadCatalog = useCallback(async () => {
     const res = await fetch("/api/channels");
@@ -68,8 +78,77 @@ export function ChannelsPanel({
     }
   }
 
+  async function removeChannel(ch: EveChannelInfo) {
+    if (!ch.sourcePath) return;
+    if (isProtectedChannel(ch)) {
+      toast.error("The Eve channel is required for local preview and cannot be deleted.");
+      return;
+    }
+    if (!confirm(`Delete channel ${ch.id}? The file will be removed from preview until you publish or revert.`)) {
+      return;
+    }
+
+    setDeleting(ch.sourcePath);
+    try {
+      const res = await fetch(`/api/channels?path=${encodeURIComponent(ch.sourcePath)}`, {
+        method: "DELETE",
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error ?? "Failed to stage channel deletion");
+        return;
+      }
+      await refreshStaging();
+      toast.success(`Staged deletion of ${ch.id} — publish when ready`);
+      onRefresh();
+    } finally {
+      setDeleting(null);
+    }
+  }
+
+  async function publishChannel(path: string) {
+    setBusyPath(path);
+    try {
+      await publish(path);
+      toast.success("Channel deletion published");
+      onRefresh();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Publish failed");
+    } finally {
+      setBusyPath(null);
+    }
+  }
+
+  async function revertChannel(path: string) {
+    setBusyPath(path);
+    try {
+      await revert(path);
+      toast.message("Channel deletion reverted");
+      onRefresh();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Revert failed");
+    } finally {
+      setBusyPath(null);
+    }
+  }
+
+  const displayChannels = useMemo(() => {
+    const byPath = new Map<string, EveChannelInfo>();
+    for (const ch of channels) {
+      if (ch.sourcePath) byPath.set(ch.sourcePath, ch);
+      else byPath.set(ch.id, ch);
+    }
+    for (const entry of stagedFiles) {
+      if (!entry.path.startsWith("agent/channels/") || !isStagedForDeletion(entry.path)) continue;
+      if (byPath.has(entry.path)) continue;
+      const id = entry.path.replace(/^agent\/channels\//, "").replace(/\.ts$/, "");
+      byPath.set(entry.path, { id, sourcePath: entry.path });
+    }
+    return [...byPath.values()].sort((a, b) => a.id.localeCompare(b.id));
+  }, [channels, stagedFiles, isStagedForDeletion]);
+
   const installedKinds = new Set(
-    channels.map((c) => c.kind ?? c.id).filter(Boolean),
+    displayChannels.map((c) => c.kind ?? c.id).filter(Boolean),
   );
 
   return (
@@ -92,39 +171,91 @@ export function ChannelsPanel({
       </div>
 
       <div className="grid gap-3">
-        {channels.length === 0 ? (
+        {displayChannels.length === 0 ? (
           <Card>
             <CardContent className="py-6 text-sm text-muted-foreground">
               No channels yet. Add Eve for local preview, or Slack/Web for production.
             </CardContent>
           </Card>
         ) : (
-          channels.map((ch) => (
-            <Card key={ch.id} size="sm">
-              <CardHeader>
-                <div className="flex items-center gap-2">
-                  <Radio className="size-4 text-muted-foreground" />
-                  <CardTitle className="font-mono text-sm">{ch.id}</CardTitle>
-                  {ch.kind && <Badge variant="outline">{ch.kind}</Badge>}
-                  {ch.sourcePath && isStaged(ch.sourcePath) && (
-                    <Badge variant="secondary" className="text-[10px]">
-                      staged
-                    </Badge>
+          displayChannels.map((ch) => {
+            const path = ch.sourcePath;
+            const pendingDelete = path ? isStagedForDeletion(path) : false;
+            const stagedEdit = path ? isStaged(path) && !pendingDelete : false;
+            const protectedChannel = isProtectedChannel(ch);
+            const busy = path !== undefined && busyPath === path;
+
+            return (
+              <Card key={path ?? ch.id} size="sm">
+                <CardHeader>
+                  <div className="flex items-center gap-2">
+                    <Radio className="size-4 text-muted-foreground" />
+                    <CardTitle className="font-mono text-sm">{ch.id}</CardTitle>
+                    {ch.kind && <Badge variant="outline">{ch.kind}</Badge>}
+                    {pendingDelete && (
+                      <Badge variant="destructive" className="text-[10px]">
+                        pending deletion
+                      </Badge>
+                    )}
+                    {stagedEdit && (
+                      <Badge variant="secondary" className="text-[10px]">
+                        staged
+                      </Badge>
+                    )}
+                  </div>
+                  {path && (
+                    <CardDescription className="font-mono text-xs">{path}</CardDescription>
                   )}
-                </div>
-                {ch.sourcePath && (
-                  <CardDescription className="font-mono text-xs">{ch.sourcePath}</CardDescription>
+                </CardHeader>
+                {path && (
+                  <CardContent className="flex flex-wrap gap-2">
+                    {!pendingDelete && (
+                      <Button variant="outline" size="sm" onClick={() => onOpenFile(path)}>
+                        Open channel file
+                      </Button>
+                    )}
+                    {pendingDelete ? (
+                      <>
+                        <Button
+                          size="sm"
+                          disabled={busy}
+                          onClick={() => void publishChannel(path)}
+                        >
+                          {busy ? <Loader2 className="animate-spin" /> : <Save />}
+                          Publish deletion
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          disabled={busy}
+                          onClick={() => void revertChannel(path)}
+                        >
+                          <RotateCcw />
+                          Revert
+                        </Button>
+                      </>
+                    ) : (
+                      !protectedChannel && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={deleting === path}
+                          onClick={() => void removeChannel(ch)}
+                        >
+                          {deleting === path ? (
+                            <Loader2 className="animate-spin" />
+                          ) : (
+                            <Trash2 />
+                          )}
+                          Delete
+                        </Button>
+                      )
+                    )}
+                  </CardContent>
                 )}
-              </CardHeader>
-              {ch.sourcePath && (
-                <CardContent>
-                  <Button variant="outline" size="sm" onClick={() => onOpenFile(ch.sourcePath!)}>
-                    Open channel file
-                  </Button>
-                </CardContent>
-              )}
-            </Card>
-          ))
+              </Card>
+            );
+          })
         )}
       </div>
 
@@ -134,7 +265,7 @@ export function ChannelsPanel({
           {catalog.map((item) => {
             const installed =
               item.kind === "eve"
-                ? channels.some((c) => c.id === "eve" || c.sourcePath?.includes("eve.ts"))
+                ? displayChannels.some((c) => c.id === "eve" || c.sourcePath?.includes("eve.ts"))
                 : installedKinds.has(item.kind);
             return (
               <Card key={item.kind} size="sm">

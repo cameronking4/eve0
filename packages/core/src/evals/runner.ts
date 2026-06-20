@@ -1,6 +1,10 @@
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { extractJson, runEve } from "../eve-cli.js";
+import {
+  resolveActiveDevServerOrigin,
+  type ResolveDevServerOriginOptions,
+} from "../preview-hosts.js";
 
 export interface EvalInfo {
   id: string;
@@ -32,7 +36,6 @@ export interface EvalRunReport {
   target?: { kind?: string; url?: string };
   results: EvalRunResult[];
   passed: boolean;
-  rawStdout?: string;
 }
 
 function parseListLine(line: string): EvalInfo | null {
@@ -105,7 +108,7 @@ export async function listProjectEvals(projectRoot: string): Promise<EvalInfo[]>
   }
 }
 
-function normalizeEvalReport(parsed: Record<string, unknown>, stdout: string): EvalRunReport {
+function normalizeEvalReport(parsed: Record<string, unknown>): EvalRunReport {
   const resultsRaw = Array.isArray(parsed.results) ? parsed.results : [];
   const results: EvalRunResult[] = resultsRaw.map((entry) => {
     const row = entry as Record<string, unknown>;
@@ -152,15 +155,79 @@ function normalizeEvalReport(parsed: Record<string, unknown>, stdout: string): E
     target: parsed.target as EvalRunReport["target"],
     results,
     passed,
-    rawStdout: stdout,
   };
+}
+
+function adaptEvalReportPayload(parsed: Record<string, unknown>): Record<string, unknown> {
+  if (Array.isArray(parsed.results)) return parsed;
+  if (!Array.isArray(parsed.evals)) return parsed;
+
+  const results = (parsed.evals as Record<string, unknown>[]).map((entry) => ({
+    id: entry.id,
+    verdict: entry.verdict,
+    error: entry.error,
+    assertions: entry.assertions,
+    result: {
+      status: entry.status,
+      assertions: entry.assertions,
+    },
+  }));
+
+  return { ...parsed, results };
+}
+
+async function listEvalRunDirs(projectRoot: string): Promise<string[]> {
+  const evalsRoot = join(projectRoot, ".eve/evals");
+  try {
+    const entries = await readdir(evalsRoot, { withFileTypes: true });
+    return entries.filter((entry) => entry.isDirectory()).map((entry) => entry.name).sort();
+  } catch {
+    return [];
+  }
+}
+
+async function readEvalSummary(
+  projectRoot: string,
+  runDir?: string,
+): Promise<Record<string, unknown> | null> {
+  const evalsRoot = join(projectRoot, ".eve/evals");
+  const candidates = runDir ? [runDir] : (await listEvalRunDirs(projectRoot)).reverse();
+
+  for (const run of candidates) {
+    try {
+      const raw = await readFile(join(evalsRoot, run, "summary.json"), "utf-8");
+      return JSON.parse(raw) as Record<string, unknown>;
+    } catch {
+      // try next run dir
+    }
+  }
+
+  return null;
+}
+
+function parseEvalReport(combined: string): Record<string, unknown> | null {
+  const jsonText = extractJson(combined);
+  if (!jsonText.startsWith("{")) return null;
+  try {
+    return adaptEvalReportPayload(JSON.parse(jsonText) as Record<string, unknown>);
+  } catch {
+    return null;
+  }
 }
 
 export async function runProjectEvals(
   projectRoot: string,
   ids?: string[],
+  options?: ResolveDevServerOriginOptions,
 ): Promise<EvalRunReport> {
-  const args = ["eval", "--json", ...(ids?.length ? ids : [])];
+  const targetUrl = await resolveActiveDevServerOrigin(projectRoot, options);
+  const args = [
+    "eval",
+    "--json",
+    ...(targetUrl ? ["--url", targetUrl] : []),
+    ...(ids?.length ? ids : []),
+  ];
+  const beforeRuns = await listEvalRunDirs(projectRoot);
   const { stdout, stderr, exitCode } = await runEve({
     cwd: projectRoot,
     args,
@@ -168,14 +235,27 @@ export async function runProjectEvals(
     timeoutMs: 300_000,
   });
 
-  // Eve exits non-zero when evals fail, but still emits a JSON report — parse it.
-  const combined = stdout || stderr;
-  const jsonText = extractJson(combined);
-  if (jsonText.startsWith("{")) {
-    return normalizeEvalReport(JSON.parse(jsonText) as Record<string, unknown>, combined);
+  const afterRuns = await listEvalRunDirs(projectRoot);
+  const newRun = afterRuns.find((run) => !beforeRuns.includes(run)) ?? afterRuns.at(-1);
+
+  // Eve's stdout JSON can truncate when the process exits before the pipe drains.
+  // Prefer the artifact summary written before stdout is logged.
+  let parsed = newRun ? await readEvalSummary(projectRoot, newRun) : null;
+  if (!parsed) {
+    parsed = await readEvalSummary(projectRoot);
+  }
+  if (!parsed) {
+    const combined = `${stdout}${stderr ? `\n${stderr}` : ""}`;
+    parsed = parseEvalReport(combined);
+  } else {
+    parsed = adaptEvalReportPayload(parsed);
+  }
+
+  if (parsed) {
+    return normalizeEvalReport(parsed);
   }
   if (exitCode !== 0) {
-    throw new Error(stderr || `eve eval exited ${exitCode}`);
+    throw new Error(stderr || stdout || `eve eval exited ${exitCode}`);
   }
   throw new Error("eve eval produced no JSON report");
 }

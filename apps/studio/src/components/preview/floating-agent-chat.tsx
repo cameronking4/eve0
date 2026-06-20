@@ -10,9 +10,11 @@ import { cn } from "@/lib/utils";
 
 export function FloatingAgentChat({
   agentName = "Agent",
+  agentScope,
   eveHost,
 }: {
   agentName?: string;
+  agentScope?: string;
   eveHost?: string | null;
 }) {
   const [open, setOpen] = useState(false);
@@ -59,8 +61,9 @@ export function FloatingAgentChat({
             </p>
             <div className="min-h-0 flex-1">
               <AgentPreview
-                key={eveHost ?? "same-origin"}
+                key={agentScope ?? eveHost ?? "same-origin"}
                 agentName={agentName}
+                agentScope={agentScope}
                 embedded
                 eveHost={eveHost}
               />

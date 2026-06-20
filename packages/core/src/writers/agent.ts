@@ -1,7 +1,97 @@
 import { Project, SyntaxKind } from "ts-morph";
+import { access } from "node:fs/promises";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { stageProjectFile, stageProjectFileDeletion } from "../staging.js";
+import { readProjectFile } from "../tree.js";
 import type { ApprovalMode } from "../types.js";
+import type { StagingManifest } from "../staging.js";
+
+const AUTHORED_TOOL_PATH = /^agent\/tools\/[a-zA-Z][a-zA-Z0-9_]*\.ts$/;
+const HARNESS_TOOL_NAMES = new Set([
+  "bash",
+  "read_file",
+  "write_file",
+  "grep",
+  "glob",
+  "list_dir",
+]);
+
+export function normalizeToolName(name: string): string {
+  const normalized = name.trim().replace(/\W/g, "_").replace(/^_+|_+$/g, "");
+  return normalized;
+}
+
+export function toolRelPath(name: string): string {
+  return `agent/tools/${normalizeToolName(name)}.ts`;
+}
+
+function normalizeToolPath(sourcePath: string): string {
+  return sourcePath.replace(/^\/+/, "");
+}
+
+async function projectPathExists(projectRoot: string, relPath: string): Promise<boolean> {
+  try {
+    await access(join(projectRoot, relPath));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export async function stageToolDeletion(
+  projectRoot: string,
+  sourcePath: string,
+): Promise<StagingManifest> {
+  const normalized = normalizeToolPath(sourcePath);
+  if (!AUTHORED_TOOL_PATH.test(normalized)) {
+    throw new Error(`Not an authored tool file: ${sourcePath}`);
+  }
+  const name = normalized.replace(/^agent\/tools\//, "").replace(/\.ts$/, "");
+  if (HARNESS_TOOL_NAMES.has(name)) {
+    throw new Error(`Harness tool "${name}" cannot be deleted.`);
+  }
+  return stageProjectFileDeletion(projectRoot, normalized);
+}
+
+export async function renameAuthoredTool(
+  projectRoot: string,
+  sourcePath: string,
+  newName: string,
+): Promise<{ oldPath: string; newPath: string; name: string }> {
+  const oldPath = normalizeToolPath(sourcePath);
+  if (!AUTHORED_TOOL_PATH.test(oldPath)) {
+    throw new Error(`Not an authored tool file: ${sourcePath}`);
+  }
+
+  const name = normalizeToolName(newName);
+  if (!name) {
+    throw new Error("Tool name is required");
+  }
+  if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(name)) {
+    throw new Error(
+      "Tool name must start with a letter or underscore and use only letters, numbers, and underscores",
+    );
+  }
+  if (HARNESS_TOOL_NAMES.has(name)) {
+    throw new Error(`"${name}" is reserved for Eve harness tools`);
+  }
+
+  const newPath = toolRelPath(name);
+  if (newPath === oldPath) {
+    return { oldPath, newPath, name };
+  }
+
+  if (await projectPathExists(projectRoot, newPath)) {
+    throw new Error(`Tool "${name}" already exists`);
+  }
+
+  const content = await readProjectFile(projectRoot, oldPath);
+  await stageProjectFile(projectRoot, newPath, content);
+  await stageProjectFileDeletion(projectRoot, oldPath);
+
+  return { oldPath, newPath, name };
+}
 
 export async function readAgentModel(projectRoot: string): Promise<string | undefined> {
   const path = join(projectRoot, "agent/agent.ts");
@@ -158,5 +248,5 @@ export default defineTool({
 `;
 
   const { writeProjectFile } = await import("../tree.js");
-  await writeProjectFile(projectRoot, `agent/tools/${name}.ts`, content);
+  await writeProjectFile(projectRoot, toolRelPath(name), content);
 }

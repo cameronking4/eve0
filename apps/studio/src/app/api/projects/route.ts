@@ -2,10 +2,12 @@ import { AGENT_COOKIE, getProjectRoot, getWorkspaceRoot } from "@/lib/config";
 import { resolveEvePreviewHost } from "@/lib/eve-preview";
 import {
   discoverEveAgentsCached,
+  ensurePreviewHost,
   fetchEveInfo,
   getLastForgeAgent,
   invalidateDiscoveryCache,
   isEveProjectRoot,
+  resolvePreviewHostsManifest,
   setLastForgeAgent,
   watchWorkspaceAgents,
 } from "@forge/core";
@@ -108,6 +110,19 @@ export async function POST(request: Request) {
       sameSite: "lax",
       path: "/",
     });
+
+    if (workspaceRoot) {
+      const manifest = resolvePreviewHostsManifest(workspaceRoot);
+      const primaryRoot = manifest?.primaryRoot ?? process.env["FORGE_PROJECT_ROOT"];
+      try {
+        await ensurePreviewHost(resolved, primaryRoot, workspaceRoot);
+      } catch (error) {
+        console.warn(
+          `[forge] Preview warmup failed for ${resolved}:`,
+          error instanceof Error ? error.message : String(error),
+        );
+      }
+    }
 
     const agents = workspaceRoot ? await enrichAgents(workspaceRoot) : [];
     const previewHost = await resolveEvePreviewHost(resolved);

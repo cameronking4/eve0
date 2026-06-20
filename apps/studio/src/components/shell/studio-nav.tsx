@@ -18,6 +18,10 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import {
+  SidebarControlTriggerContent,
+  sidebarControlTriggerClassName,
+} from "@/components/shell/sidebar-control-trigger";
 import { cn } from "@/lib/utils";
 
 export type StudioPanel =
@@ -130,38 +134,25 @@ export function StudioNav({ active, open, onOpenChange, onSelect }: StudioNavPro
 
   return (
     <Collapsible open={open} onOpenChange={onOpenChange} className="shrink-0">
-      <CollapsibleTrigger
-        className={cn(
-          "group flex w-full items-center gap-2 rounded-lg border bg-card px-2.5 py-2 text-left shadow-sm transition-all",
-          "hover:border-primary/30 hover:bg-accent/40 hover:shadow-md",
-          open && "border-primary/40 bg-accent/30",
-        )}
-      >
-        <span
-          className={cn(
-            "flex size-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary transition-colors",
-            "group-hover:bg-primary/15",
-          )}
-        >
-          <ActiveIcon className="size-4" />
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="block text-xs font-semibold">{open ? "Studio" : activeItem.label}</span>
-          <span className="block truncate text-[10px] text-muted-foreground">
-            {open ? "Collapse navigation" : activeItem.description}
-          </span>
-        </span>
-        <ChevronDown
-          className={cn(
-            "size-4 shrink-0 text-muted-foreground transition-transform duration-200",
-            open && "rotate-180",
-          )}
+      <CollapsibleTrigger className={sidebarControlTriggerClassName(open)}>
+        <SidebarControlTriggerContent
+          icon={ActiveIcon}
+          title={open ? "Studio" : activeItem.label}
+          subtitle={open ? "Collapse navigation" : activeItem.description}
+          trailing={
+            <ChevronDown
+              className={cn(
+                "size-4 shrink-0 text-muted-foreground/70 transition-transform duration-200",
+                open && "rotate-180",
+              )}
+            />
+          }
         />
       </CollapsibleTrigger>
 
-      <CollapsibleContent className="pt-2">
+      <CollapsibleContent className="pt-1.5">
         <nav
-          className="max-h-[min(42vh,360px)] space-y-3 overflow-y-auto rounded-lg border bg-card/50 p-2"
+          className="max-h-[min(42vh,360px)] space-y-3 overflow-y-auto rounded-lg border border-border bg-background p-1.5"
           aria-label="Studio navigation"
         >
           {groups.map(({ group, items }) => (

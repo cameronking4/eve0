@@ -119,13 +119,13 @@ export function ScaffoldWizard() {
   }, []);
 
   const streamRun = useCallback(
-    async (id: string, opts: { existing?: boolean } = {}) => {
+    async (id: string, opts: { existing?: boolean; force?: boolean } = {}) => {
       setPhase("running");
       try {
         const res = await fetch("/api/scaffold/run", {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ id, existing: opts.existing }),
+          body: JSON.stringify({ id, existing: opts.existing, force: opts.force }),
         });
         if (res.status === 409) {
           // already running/complete elsewhere → poll instead (M-A2)
@@ -340,11 +340,15 @@ export function ScaffoldWizard() {
                 variant="outline"
                 onClick={() => {
                   if (sessionId) {
-                    void streamRun(sessionId, { existing: !isNewAgent && onboarding?.mode === "blank" });
+                    const forceIntoExisting = error?.includes("not empty") ?? false;
+                    void streamRun(sessionId, {
+                      existing: !isNewAgent && onboarding?.mode === "blank",
+                      force: forceIntoExisting,
+                    });
                   }
                 }}
               >
-                Retry
+                {error?.includes("not empty") ? "Retry with --force" : "Retry"}
               </Button>
               <Button
                 variant="ghost"
