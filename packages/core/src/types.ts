@@ -36,6 +36,7 @@ export interface EveConnectionInfo {
   id: string;
   description?: string;
   sourcePath?: string;
+  url?: string;
 }
 
 export interface EveManifest {

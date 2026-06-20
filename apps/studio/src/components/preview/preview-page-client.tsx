@@ -20,11 +20,11 @@ export function PreviewPageClient() {
 
   return (
     <div className="flex h-screen flex-col">
-      <div className="flex items-center gap-2 border-b px-4 py-2">
-        <AgentSelector />
+      <div className="flex items-center gap-3 border-b px-4 py-3">
+        <AgentSelector variant="compact" />
         <OpenAgentFolderButton />
       </div>
-      <div className="relative min-h-0 flex-1">
+      <div className="relative flex min-h-0 flex-1 flex-col">
         {isSwitching && (
           <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/70">
             <p className="text-sm text-muted-foreground">Loading agent…</p>
@@ -33,6 +33,7 @@ export function PreviewPageClient() {
         <AgentPreview
           key={activeRoot}
           agentName={agentName}
+          agentScope={activeRoot}
           eveHost={previewHost}
         />
       </div>

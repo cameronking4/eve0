@@ -9,10 +9,10 @@ const nextConfig: NextConfig = {
   output: "standalone",
   // Trace workspace deps from the monorepo root into the standalone bundle.
   outputFileTracingRoot: process.env.FORGE_STUDIO_TRACING_ROOT || undefined,
-  transpilePackages: ["@forge/core"],
-  // Keep the scaffolder (and its ai@4 dependency) external so it does not
-  // collide with Studio's own ai@7 during bundling.
-  serverExternalPackages: ["@forge/scaffolder"],
+  // @forge/core ships prebuilt dist/ — externalize on the server so catch-all
+  // API routes (especially /api/eve-proxy) don't bundle ts-morph/jiti into
+  // Next's dev worker pool (which caused `spawn EBADF`).
+  serverExternalPackages: ["@forge/scaffolder", "@forge/core"],
 };
 
 const eveRoot = process.env.FORGE_PROJECT_ROOT;

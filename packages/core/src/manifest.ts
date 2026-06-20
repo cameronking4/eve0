@@ -141,10 +141,24 @@ function parseSchedule(raw: Record<string, unknown>): EveScheduleInfo {
 }
 
 function parseConnection(raw: Record<string, unknown>): EveConnectionInfo {
+  const logicalPath = asString(raw.logicalPath) ?? asString(raw.sourcePath) ?? asString(raw.path);
+  const sourcePath = logicalPath ? agentRelativePath(logicalPath) : undefined;
+  const id =
+    asString(raw.connectionName) ??
+    asString(raw.id) ??
+    asString(raw.name) ??
+    (sourcePath ? basename(sourcePath).replace(/\.ts$/i, "") : undefined) ??
+    "unknown";
+
+  const definition = asRecord(raw.definition);
+  const description =
+    asString(raw.description) ??
+    asString(definition?.description);
+
   return {
-    id: asString(raw.id) ?? asString(raw.name) ?? "unknown",
-    description: asString(raw.description),
-    sourcePath: asString(raw.sourcePath) ?? asString(raw.path) ?? asString(raw.logicalPath),
+    id,
+    description,
+    sourcePath,
   };
 }
 
@@ -217,7 +231,7 @@ export function normalizeEveInfo(raw: Record<string, unknown>): EveManifest {
   const channels = asArray<Record<string, unknown>>(raw.channels ?? agent.channels).map(parseChannel);
   const schedules = asArray<Record<string, unknown>>(raw.schedules ?? agent.schedules).map(parseSchedule);
   const connections = asArray<Record<string, unknown>>(raw.connections ?? agent.connections).map(
-    parseConnection,
+    (entry) => parseConnection(entry),
   );
 
   const diagnostics = [
@@ -260,7 +274,9 @@ function normalizeDiscoveryManifest(raw: Record<string, unknown>): EveManifest {
     skills: asArray<unknown>(raw.skills).map((entry) => parseSkillEntry(entry)),
     channels: asArray<Record<string, unknown>>(raw.channels).map(parseChannel),
     schedules: asArray<Record<string, unknown>>(raw.schedules).map(parseSchedule),
-    connections: asArray<Record<string, unknown>>(raw.connections).map(parseConnection),
+    connections: asArray<Record<string, unknown>>(raw.connections).map((entry) =>
+      parseConnection(entry),
+    ),
     diagnostics,
     raw,
   };
@@ -290,6 +306,34 @@ async function readToolDescriptionFromFile(
   try {
     const content = await readFile(join(projectRoot, sourcePath), "utf-8");
     const match = content.match(/description:\s*("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')/);
+    if (!match) return undefined;
+    return JSON.parse(match[1]) as string;
+  } catch {
+    return undefined;
+  }
+}
+
+async function readConnectionDescriptionFromFile(
+  projectRoot: string,
+  sourcePath: string,
+): Promise<string | undefined> {
+  try {
+    const content = await readFile(join(projectRoot, sourcePath), "utf-8");
+    const match = content.match(/description:\s*("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')/);
+    if (!match) return undefined;
+    return JSON.parse(match[1]) as string;
+  } catch {
+    return undefined;
+  }
+}
+
+async function readConnectionUrlFromFile(
+  projectRoot: string,
+  sourcePath: string,
+): Promise<string | undefined> {
+  try {
+    const content = await readFile(join(projectRoot, sourcePath), "utf-8");
+    const match = content.match(/url:\s*("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')/);
     if (!match) return undefined;
     return JSON.parse(match[1]) as string;
   } catch {
@@ -346,9 +390,24 @@ export async function fetchEveInfo(projectRoot: string): Promise<EveManifest> {
 function mergeManifests(info: EveManifest, discovery: EveManifest): EveManifest {
   const toolByName = new Map(discovery.tools.map((t) => [t.name, t]));
   const skillById = new Map(discovery.skills.map((s) => [s.id, s]));
+  const connectionById = new Map(discovery.connections.map((c) => [c.id, c]));
+
+  const connections =
+    discovery.connections.length > 0
+      ? discovery.connections.map((conn) => {
+          const rich = connectionById.get(conn.id);
+          if (!rich) return conn;
+          return {
+            ...conn,
+            description: conn.description ?? rich.description,
+            sourcePath: conn.sourcePath ?? rich.sourcePath,
+          };
+        })
+      : info.connections;
 
   return {
     ...info,
+    connections,
     tools: info.tools.map((tool) => {
       const rich = toolByName.get(tool.name);
       if (!rich) return tool;
@@ -392,6 +451,34 @@ export async function enrichManifestFromDisk(
     }),
   );
 
+  let enrichedConnections = await Promise.all(
+    manifest.connections.map(async (conn) => {
+      let next = { ...conn };
+      if (next.sourcePath && !next.description) {
+        const description = await readConnectionDescriptionFromFile(projectRoot, next.sourcePath);
+        if (description) next = { ...next, description };
+      }
+      if (next.sourcePath && !next.url) {
+        const url = await readConnectionUrlFromFile(projectRoot, next.sourcePath);
+        if (url) next = { ...next, url };
+      }
+      return next;
+    }),
+  );
+
+  if (enrichedConnections.length === 0) {
+    const { listAuthoredConnections } = await import("./writers/connection.js");
+    const slugs = await listAuthoredConnections(projectRoot);
+    enrichedConnections = await Promise.all(
+      slugs.map(async (slug) => {
+        const sourcePath = `agent/connections/${slug}.ts`;
+        const description = await readConnectionDescriptionFromFile(projectRoot, sourcePath);
+        const url = await readConnectionUrlFromFile(projectRoot, sourcePath);
+        return { id: slug, sourcePath, description, url };
+      }),
+    );
+  }
+
   const existingNames = new Set(enrichedTools.map((t) => t.name));
   const harnessTools: EveToolInfo[] = DEFAULT_HARNESS_TOOLS.filter((n) => !existingNames.has(n)).map(
     (name) => ({
@@ -412,6 +499,7 @@ export async function enrichManifestFromDisk(
   return {
     ...manifest,
     tools: [...enrichedTools, ...harnessTools],
+    connections: enrichedConnections,
     diagnostics: mergedDiagnostics,
   };
 }

@@ -22,5 +22,7 @@ export * from "./writers/skill.js";
 export * from "./writers/channel.js";
 export * from "./writers/schedule.js";
 export * from "./writers/agent.js";
+export * from "./connections/debug.js";
+export * from "./writers/connection.js";
 export * from "./writers/readme.js";
 export * from "./doctor.js";

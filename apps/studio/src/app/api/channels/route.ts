@@ -2,8 +2,10 @@ import { getProjectRoot } from "@/lib/config";
 import {
   addChannelViaEveCli,
   CHANNEL_CATALOG,
+  isProtectedChannel,
   listChannelFiles,
   readProjectFile,
+  stageChannelDeletion,
   stageProjectFile,
   verifyEveChannel,
 } from "@forge/core";
@@ -76,6 +78,34 @@ export async function POST(req: Request) {
     }
 
     return NextResponse.json({ error: `Unknown channel kind: ${body.kind}` }, { status: 400 });
+  } catch (e) {
+    return NextResponse.json(
+      { error: e instanceof Error ? e.message : String(e) },
+      { status: 500 },
+    );
+  }
+}
+
+export async function DELETE(req: Request) {
+  const path = new URL(req.url).searchParams.get("path");
+  if (!path) {
+    return NextResponse.json({ error: "path required" }, { status: 400 });
+  }
+
+  try {
+    const root = await getProjectRoot();
+    const normalized = path.replace(/^\/+/, "");
+    const id = normalized.replace(/^agent\/channels\//, "").replace(/\.ts$/, "");
+
+    if (isProtectedChannel({ id, sourcePath: normalized })) {
+      return NextResponse.json(
+        { error: "The Eve channel is required for local preview and cannot be deleted." },
+        { status: 400 },
+      );
+    }
+
+    await stageChannelDeletion(root, normalized);
+    return NextResponse.json({ ok: true, path: normalized, staged: true });
   } catch (e) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : String(e) },

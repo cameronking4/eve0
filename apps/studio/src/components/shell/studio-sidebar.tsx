@@ -36,7 +36,7 @@ export function StudioSidebar({
         disabled && "pointer-events-none opacity-60",
       )}
     >
-      <div className="shrink-0 space-y-2 border-b bg-background/80 p-2 backdrop-blur-sm">
+      <div className="flex shrink-0 flex-col gap-1.5 border-b p-2">
         <AgentSelector onSwitch={onAgentSwitch} />
         <div className="sm:hidden">
           <OpenAgentFolderButton className="w-full" />

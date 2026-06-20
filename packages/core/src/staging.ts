@@ -13,6 +13,13 @@ export interface StagingManifest {
   files: Record<string, StagedFileEntry>;
 }
 
+/** Sentinel written to {@link StagedFileEntry.staged} when a file is staged for deletion. */
+export const STAGING_DELETED = "\0forge:deleted";
+
+export function isStagedDeletion(staged: string): boolean {
+  return staged === STAGING_DELETED;
+}
+
 const FORGE_DIR = ".forge";
 const MANIFEST_NAME = "staging-manifest.json";
 
@@ -75,6 +82,56 @@ export async function stageProjectFile(
   return manifest;
 }
 
+async function deleteProjectFile(projectRoot: string, relPath: string): Promise<void> {
+  const { unlink } = await import("node:fs/promises");
+  try {
+    await unlink(join(projectRoot, relPath));
+  } catch {
+    // already removed
+  }
+}
+
+async function applyPublishedEntry(projectRoot: string, entry: StagedFileEntry): Promise<void> {
+  if (isStagedDeletion(entry.staged)) {
+    await deleteProjectFile(projectRoot, entry.path);
+    return;
+  }
+  await writeProjectFile(projectRoot, entry.path, entry.staged);
+}
+
+async function applyRevertedEntry(projectRoot: string, entry: StagedFileEntry): Promise<void> {
+  await writeProjectFile(projectRoot, entry.path, entry.published);
+}
+
+/** Stage a file deletion: removes it from disk for preview, revert restores published content. */
+export async function stageProjectFileDeletion(
+  projectRoot: string,
+  relPath: string,
+): Promise<StagingManifest> {
+  const manifest = await getStagingManifest(projectRoot);
+  const existing = manifest.files[relPath];
+
+  let published: string;
+  if (existing && !isStagedDeletion(existing.staged)) {
+    published = existing.published || existing.staged;
+  } else if (existing && isStagedDeletion(existing.staged)) {
+    return manifest;
+  } else {
+    published = await readProjectFile(projectRoot, relPath);
+  }
+
+  manifest.files[relPath] = {
+    path: relPath,
+    published,
+    staged: STAGING_DELETED,
+    stagedAt: new Date().toISOString(),
+  };
+
+  await deleteProjectFile(projectRoot, relPath);
+  await saveManifest(projectRoot, manifest);
+  return manifest;
+}
+
 export async function publishProjectFile(
   projectRoot: string,
   relPath: string,
@@ -83,7 +140,7 @@ export async function publishProjectFile(
   const entry = manifest.files[relPath];
   if (!entry) return manifest;
 
-  await writeProjectFile(projectRoot, relPath, entry.staged);
+  await applyPublishedEntry(projectRoot, entry);
   delete manifest.files[relPath];
   await saveManifest(projectRoot, manifest);
   return manifest;
@@ -97,7 +154,7 @@ export async function revertProjectFile(
   const entry = manifest.files[relPath];
   if (!entry) return manifest;
 
-  await writeProjectFile(projectRoot, relPath, entry.published);
+  await applyRevertedEntry(projectRoot, entry);
   delete manifest.files[relPath];
   await saveManifest(projectRoot, manifest);
   return manifest;
@@ -106,7 +163,7 @@ export async function revertProjectFile(
 export async function publishAllStaged(projectRoot: string): Promise<StagingManifest> {
   const manifest = await getStagingManifest(projectRoot);
   for (const entry of Object.values(manifest.files)) {
-    await writeProjectFile(projectRoot, entry.path, entry.staged);
+    await applyPublishedEntry(projectRoot, entry);
   }
   const cleared: StagingManifest = { files: {} };
   await saveManifest(projectRoot, cleared);
@@ -116,7 +173,7 @@ export async function publishAllStaged(projectRoot: string): Promise<StagingMani
 export async function revertAllStaged(projectRoot: string): Promise<StagingManifest> {
   const manifest = await getStagingManifest(projectRoot);
   for (const entry of Object.values(manifest.files)) {
-    await writeProjectFile(projectRoot, entry.path, entry.published);
+    await applyRevertedEntry(projectRoot, entry);
   }
   const cleared: StagingManifest = { files: {} };
   await saveManifest(projectRoot, cleared);

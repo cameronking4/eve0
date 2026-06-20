@@ -1,5 +1,7 @@
 import { runEve } from "../eve-cli.js";
 import { fetchEveInfo } from "../manifest.js";
+import { stageProjectFileDeletion, type StagingManifest } from "../staging.js";
+import type { EveChannelInfo } from "../types.js";
 
 export const CHANNEL_CATALOG = [
   {
@@ -71,4 +73,28 @@ export async function listChannelFiles(projectRoot: string): Promise<string[]> {
   } catch {
     return [];
   }
+}
+
+/** The Eve dev channel is required for local preview and must not be removed. */
+export function isProtectedChannel(channel: Pick<EveChannelInfo, "id" | "sourcePath">): boolean {
+  return (
+    channel.id === "eve" ||
+    channel.sourcePath === "agent/channels/eve.ts" ||
+    channel.sourcePath?.endsWith("/channels/eve.ts") === true
+  );
+}
+
+export async function stageChannelDeletion(
+  projectRoot: string,
+  sourcePath: string,
+): Promise<StagingManifest> {
+  const normalized = sourcePath.replace(/^\/+/, "");
+  if (!normalized.startsWith("agent/channels/") || !normalized.endsWith(".ts")) {
+    throw new Error(`Not a channel file: ${sourcePath}`);
+  }
+  const id = normalized.replace(/^agent\/channels\//, "").replace(/\.ts$/, "");
+  if (id === "eve") {
+    throw new Error("The Eve channel is required for local preview and cannot be deleted.");
+  }
+  return stageProjectFileDeletion(projectRoot, normalized);
 }
