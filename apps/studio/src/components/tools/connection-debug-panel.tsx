@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Loader2, Play, Sparkles, Wrench } from "lucide-react";
 import type { EveConnectionInfo, McpConnectionToolInfo } from "@forge/core";
+import { readForgeApiJson } from "@/lib/forge-api";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -47,8 +48,8 @@ function McpToolDebugPanel({
           inputSchema: tool.inputSchema,
         }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "AI fill failed");
+      const data = await readForgeApiJson(res);
+      if (!res.ok) throw new Error(String(data.error ?? "AI fill failed"));
       setInputJson(JSON.stringify(data.input ?? {}, null, 2));
     } catch (e) {
       setResult({ error: e instanceof Error ? e.message : String(e) });
@@ -72,8 +73,8 @@ function McpToolDebugPanel({
           input,
         }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Debug run failed");
+      const data = await readForgeApiJson(res);
+      if (!res.ok) throw new Error(String(data.error ?? "Debug run failed"));
       setResult(data);
     } catch (e) {
       setResult({ error: e instanceof Error ? e.message : String(e) });
@@ -198,7 +199,9 @@ export function ConnectionDebugPanel({ connection }: { connection: EveConnection
         const res = await fetch(
           `/api/connections/tools?path=${encodeURIComponent(connection.sourcePath!)}`,
         );
-        const data = await res.json();
+        const data = await readForgeApiJson<{ tools?: McpConnectionToolInfo[]; error?: string }>(
+          res,
+        );
         if (!res.ok) throw new Error(data.error ?? "Failed to load MCP tools");
         if (cancelled) return;
         const loaded = (data.tools as McpConnectionToolInfo[]) ?? [];

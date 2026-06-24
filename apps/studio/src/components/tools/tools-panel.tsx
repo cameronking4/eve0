@@ -9,6 +9,7 @@ import { ToolGallerySheet } from "@/components/tools/tool-gallery-sheet";
 import { ConnectionDebugPanel } from "@/components/tools/connection-debug-panel";
 import { McpConnectionSheet } from "@/components/tools/mcp-connection-sheet";
 import { useStaging } from "@/context/staging-context";
+import { readForgeApiJson } from "@/lib/forge-api";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -246,11 +247,11 @@ export function ToolsPanel({
             newSlug: nextValue,
           }),
         });
-        const data = await res.json();
+        const data = await readForgeApiJson<{ error?: string; slug?: string }>(res);
         if (!res.ok) throw new Error(data.error ?? "Rename failed");
         await refreshStaging();
         toast.success(`Staged rename to ${data.slug} — publish when ready`);
-        setSelectedConnection(data.slug);
+        setSelectedConnection(data.slug ?? nextValue);
         setSelected(null);
       }
       setRenameTarget(null);
@@ -328,7 +329,7 @@ export function ToolsPanel({
           `/api/connections?path=${encodeURIComponent(deleteTarget.sourcePath)}`,
           { method: "DELETE" },
         );
-        const data = await res.json();
+        const data = await readForgeApiJson<{ error?: string }>(res);
         if (!res.ok) throw new Error(data.error ?? "Delete failed");
         await refreshStaging();
         toast.success(`Staged deletion of ${deleteTarget.id} — publish when ready`);
@@ -455,7 +456,7 @@ export function ToolsPanel({
           const busy = path !== undefined && busyPath === path;
 
           return (
-            <div className="flex min-w-0 flex-1 flex-col gap-3">
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3">
               <div className="flex flex-wrap items-start gap-2">
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
@@ -523,7 +524,7 @@ export function ToolsPanel({
           const busy = path !== undefined && busyPath === path;
 
           return (
-            <div className="flex min-w-0 flex-1 flex-col gap-3">
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3">
               <div className="flex flex-wrap items-start gap-2">
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">

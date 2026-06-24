@@ -14,6 +14,15 @@ const SKIP_DIRS = new Set([
   "coverage",
   ".forge",
   ".vercel",
+  // Cursor/Claude skill checkouts (e.g. a full vendored copy of the Eve
+  // framework source) — thousands of source files we must never watch.
+  ".agents",
+  // Eve writes high-churn durable-workflow data here (stream chunks, events,
+  // step locks — thousands of tiny files per run). Watching it makes chokidar
+  // hold an open fd per file, leaking descriptors until the long-running Studio
+  // process exhausts its fd limit and `child_process.spawn` (e.g. `eve init`
+  // when creating a new agent) fails with `spawn EBADF`.
+  ".workflow-data",
 ]);
 
 interface CacheEntry {

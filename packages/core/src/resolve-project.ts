@@ -1,7 +1,12 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import { discoverEveAgents, isForgeWorkspaceRoot, type DiscoveredAgent } from "./discover-agents.js";
+import {
+  discoverEveAgents,
+  findEnclosingWorkspace,
+  isForgeWorkspaceRoot,
+  type DiscoveredAgent,
+} from "./discover-agents.js";
 import { discoverEveAgentsCached } from "./discover-agents-cache.js";
 
 function expandHome(path: string): string {
@@ -324,6 +329,16 @@ export function resolveForgeProjectRoot(
 
   const fromCwd = walkUpForEveProject(process.cwd());
   if (fromCwd && !opts.agent) {
+    // Even when launched from inside one agent, surface sibling agents as a
+    // workspace so the picker, switching, and preview pool all work.
+    const enclosing = walkUpForForgeWorkspace(fromCwd) ?? findEnclosingWorkspace(fromCwd);
+    if (enclosing) {
+      const agents = discoverEveAgentsCached(enclosing);
+      const isMember = agents.some((a) => resolve(a.root) === resolve(fromCwd));
+      if (agents.length >= 2 && isMember) {
+        return { root: fromCwd, workspaceRoot: enclosing, source: "cwd" };
+      }
+    }
     return { root: fromCwd, source: "cwd" };
   }
 

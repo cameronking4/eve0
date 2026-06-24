@@ -33,6 +33,11 @@ interface ProjectContextValue {
 
 const ProjectContext = createContext<ProjectContextValue | null>(null);
 
+function sameAgents(a: WorkspaceAgent[], b: WorkspaceAgent[]): boolean {
+  if (a.length !== b.length) return false;
+  return a.every((agent, i) => agent.root === b[i].root && agent.name === b[i].name);
+}
+
 export function ProjectProvider({ children }: { children: ReactNode }) {
   const [isWorkspace, setIsWorkspace] = useState(false);
   const [workspaceRoot, setWorkspaceRoot] = useState<string | null>(null);
@@ -59,12 +64,43 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     setIsLoading(false);
   }, []);
 
+  /** Cheap roster-only refresh used by polling so newly created agents appear without a reload. */
+  const refreshAgents = useCallback(async () => {
+    const res = await fetch("/api/projects?agents=1");
+    const data = await res.json();
+    if (data.error) return;
+    setIsWorkspace(Boolean(data.isWorkspace));
+    setWorkspaceRoot((prev) => (prev === (data.workspaceRoot ?? null) ? prev : data.workspaceRoot ?? null));
+    const next = (data.agents ?? []) as WorkspaceAgent[];
+    setAgents((prev) => (sameAgents(prev, next) ? prev : next));
+  }, []);
+
   useEffect(() => {
     refresh().catch((error) => {
       toast.error(error instanceof Error ? error.message : "Failed to load workspace");
       setIsLoading(false);
     });
   }, [refresh]);
+
+  // Keep the agent roster live (new folders, scaffolds, deletions) without a
+  // full reload. Pauses while switching and while the tab is hidden.
+  useEffect(() => {
+    let cancelled = false;
+    const tick = () => {
+      if (cancelled || isSwitching || document.hidden) return;
+      void refreshAgents();
+    };
+    const interval = setInterval(tick, 4000);
+    const onVisible = () => {
+      if (!document.hidden) tick();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [refreshAgents, isSwitching]);
 
   const switchAgent = useCallback(
     async (root: string) => {

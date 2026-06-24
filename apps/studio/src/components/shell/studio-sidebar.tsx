@@ -1,10 +1,16 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
+import { Plus } from "lucide-react";
 import type { FileTreeNode } from "@forge/core";
 import { OpenAgentFolderButton } from "@/components/open-agent-folder-button";
 import { ProjectFileTree } from "@/components/file-tree/project-file-tree";
 import { StudioNav, type StudioPanel } from "@/components/shell/studio-nav";
+import {
+  SidebarControlTriggerContent,
+  sidebarControlTriggerClassName,
+} from "@/components/shell/sidebar-control-trigger";
 import { cn } from "@/lib/utils";
 
 type StudioSidebarProps = {
@@ -34,6 +40,17 @@ export function StudioSidebar({
       )}
     >
       <div className="flex shrink-0 flex-col gap-1.5 border-b p-2">
+        <Link
+          href="/scaffold?new=1"
+          className={sidebarControlTriggerClassName()}
+          aria-label="Create new agent"
+        >
+          <SidebarControlTriggerContent
+            icon={Plus}
+            title="Create new agent"
+            subtitle="Scaffold a fresh Eve agent"
+          />
+        </Link>
         <div className="sm:hidden">
           <OpenAgentFolderButton className="w-full" />
         </div>

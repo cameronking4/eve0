@@ -4,51 +4,57 @@ import {
   discoverEveAgentsCached,
   ensurePreviewHost,
   fetchEveInfo,
-  getLastForgeAgent,
   invalidateDiscoveryCache,
   isEveProjectRoot,
   resolvePreviewHostsManifest,
   setLastForgeAgent,
   watchWorkspaceAgents,
+  type DiscoveredAgent,
 } from "@forge/core";
 import { cookies } from "next/headers";
 import { basename, resolve } from "node:path";
 import { NextResponse } from "next/server";
 
-let workspaceWatcherStarted = false;
+const watchedWorkspaces = new Set<string>();
 
 function ensureWorkspaceWatcher(workspaceRoot: string): void {
-  if (workspaceWatcherStarted) return;
-  workspaceWatcherStarted = true;
-  watchWorkspaceAgents(workspaceRoot, () => {
-    invalidateDiscoveryCache(workspaceRoot);
+  const key = resolve(workspaceRoot);
+  if (watchedWorkspaces.has(key)) return;
+  watchedWorkspaces.add(key);
+  // Cache invalidation happens inside watchWorkspaceAgents; the callback keeps
+  // the Set honest if the watcher ever needs to be re-keyed.
+  watchWorkspaceAgents(key, () => {
+    invalidateDiscoveryCache(key);
   });
 }
 
-async function enrichAgents(workspaceRoot: string) {
+/**
+ * Cheap workspace agent list — driven entirely by the cached filesystem
+ * discovery (folder + package.json name). Deliberately avoids `eve info` per
+ * agent so this can be polled frequently without spawning child processes.
+ */
+function listWorkspaceAgents(workspaceRoot: string): DiscoveredAgent[] {
   ensureWorkspaceWatcher(workspaceRoot);
-  const agents = discoverEveAgentsCached(workspaceRoot);
-  return Promise.all(
-    agents.map(async (agent) => {
-      let name = agent.name;
-      try {
-        const info = await fetchEveInfo(agent.root);
-        if (info.name) name = info.name;
-      } catch {
-        // fall back to package.json / folder name
-      }
-      return { ...agent, name };
-    }),
-  );
+  return discoverEveAgentsCached(workspaceRoot);
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const workspaceRoot = getWorkspaceRoot();
     const activeRoot = await getProjectRoot();
     const isWorkspace = Boolean(workspaceRoot);
+    const agents = isWorkspace && workspaceRoot ? listWorkspaceAgents(workspaceRoot) : [];
 
-    const agents = isWorkspace && workspaceRoot ? await enrichAgents(workspaceRoot) : [];
+    // Lightweight polling path: just the agent roster + active selection.
+    if (new URL(request.url).searchParams.get("agents") === "1") {
+      return NextResponse.json({
+        workspaceRoot: workspaceRoot ?? null,
+        activeRoot,
+        isWorkspace,
+        agents,
+      });
+    }
+
     const previewHost = await resolveEvePreviewHost(activeRoot);
 
     let agentName =
@@ -124,14 +130,23 @@ export async function POST(request: Request) {
       }
     }
 
-    const agents = workspaceRoot ? await enrichAgents(workspaceRoot) : [];
+    const agents = workspaceRoot ? listWorkspaceAgents(workspaceRoot) : [];
     const previewHost = await resolveEvePreviewHost(resolved);
+
+    let agentName = agents.find((a) => resolve(a.root) === resolved)?.name ?? null;
+    if (!agentName) {
+      try {
+        agentName = (await fetchEveInfo(resolved)).name ?? basename(resolved);
+      } catch {
+        agentName = basename(resolved);
+      }
+    }
 
     return NextResponse.json({
       activeRoot: resolved,
       previewHost: previewHost || null,
       usePreviewProxy: Boolean(workspaceRoot),
-      agentName: agents.find((a) => resolve(a.root) === resolved)?.name ?? null,
+      agentName,
     });
   } catch (e) {
     return NextResponse.json(

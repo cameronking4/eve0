@@ -1,5 +1,5 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { basename, join, relative, resolve } from "node:path";
+import { basename, dirname, join, relative, resolve } from "node:path";
 import { isEveProjectRoot } from "./resolve-project.js";
 
 const SKIP_DIRS = new Set([
@@ -13,6 +13,11 @@ const SKIP_DIRS = new Set([
   "coverage",
   ".forge",
   ".vercel",
+  // Skill checkouts (e.g. a vendored copy of the Eve framework source, which
+  // itself contains test-fixture agents) must not be scanned for agents.
+  ".agents",
+  // Eve durable-workflow runtime data — never an agent root.
+  ".workflow-data",
 ]);
 
 /** Subtrees that are never scanned for agents (scaffolds, examples, test fixtures). */
@@ -92,4 +97,20 @@ export function isForgeWorkspaceRoot(dir: string): boolean {
   const resolved = resolve(dir);
   if (isEveProjectRoot(resolved)) return false;
   return discoverEveAgents(resolved).length >= 2;
+}
+
+/**
+ * Walk upward from an agent root and return the nearest ancestor directory that
+ * is a multi-agent workspace (2+ discovered agents). Returns `null` when the
+ * agent is standalone. Used so `forge dev` / Studio can treat sibling agents as
+ * a workspace even when launched from inside a single agent folder.
+ */
+export function findEnclosingWorkspace(agentRoot: string): string | null {
+  let current = dirname(resolve(agentRoot));
+  for (;;) {
+    if (isForgeWorkspaceRoot(current)) return current;
+    const parent = dirname(current);
+    if (parent === current) return null;
+    current = parent;
+  }
 }

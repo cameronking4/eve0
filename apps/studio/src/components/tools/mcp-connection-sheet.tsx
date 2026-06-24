@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
+import { readForgeApiJson } from "@/lib/forge-api";
 
 type CatalogEntry = {
   slug: string;
@@ -64,7 +65,11 @@ export function McpConnectionSheet({ onAdded }: { onAdded: () => void }) {
 
   const loadCatalog = useCallback(async () => {
     const res = await fetch("/api/connections");
-    const data = await res.json();
+    const data = await readForgeApiJson<{
+      catalog?: CatalogEntry[];
+      installed?: string[];
+      error?: string;
+    }>(res);
     if (!res.ok) throw new Error(data.error ?? "Failed to load MCP catalog");
     setCatalog(data.catalog ?? []);
     setInstalled(data.installed ?? []);
@@ -82,7 +87,11 @@ export function McpConnectionSheet({ onAdded }: { onAdded: () => void }) {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ action: "catalog", slug: entry.slug }),
       });
-      const data = await res.json();
+      const data = await readForgeApiJson<{
+        error?: string;
+        message?: string;
+        envKeysRequired?: string[];
+      }>(res);
       if (!res.ok) throw new Error(data.error ?? "Failed to add MCP connection");
       await refreshStaging();
       toast.success(data.message ?? `Staged ${entry.slug}`, {
@@ -127,7 +136,11 @@ export function McpConnectionSheet({ onAdded }: { onAdded: () => void }) {
           headerEnvVar: headerEnvVar.trim() || undefined,
         }),
       });
-      const data = await res.json();
+      const data = await readForgeApiJson<{
+        error?: string;
+        message?: string;
+        envKeysRequired?: string[];
+      }>(res);
       if (!res.ok) throw new Error(data.error ?? "Failed to add MCP connection");
       await refreshStaging();
       const envKeys = (data.envKeysRequired as string[] | undefined) ?? [];

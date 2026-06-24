@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ExternalLink, Loader2, Sparkles } from "lucide-react";
+import { ExternalLink, Loader2, Wand2 } from "lucide-react";
 import { toast } from "sonner";
 import { ChannelsPanel } from "@/components/channels/channels-panel";
 import { SchedulesPanel } from "@/components/schedules/schedules-panel";
@@ -16,6 +16,7 @@ import type { StudioPanel } from "@/components/shell/studio-nav";
 import { InstructionsEditor } from "@/components/instructions/instructions-editor";
 import { OpenAgentFolderButton } from "@/components/open-agent-folder-button";
 import { FloatingAgentChat } from "@/components/preview/floating-agent-chat";
+import { AgentWorkbenchOverlay } from "@/components/workbench/agent-workbench-overlay";
 import { StagingBar } from "@/components/staging/staging-bar";
 import { ToolsPanel } from "@/components/tools/tools-panel";
 import { InlineToolDebug } from "@/components/tools/tool-debug-panel";
@@ -113,6 +114,7 @@ export default function StudioPage() {
   const [fileContent, setFileContent] = useState("");
   const [publishedFileContent, setPublishedFileContent] = useState("");
   const [exportPath, setExportPath] = useState("./forge-export");
+  const [workbenchOpen, setWorkbenchOpen] = useState(false);
 
   const refresh = useCallback(async () => {
     const [mRes, tRes, iRes, aRes] = await Promise.all([
@@ -217,13 +219,10 @@ export default function StudioPage() {
         <AgentSelector onSwitch={handleAgentSwitch} variant="compact" />
         <div className="ml-auto flex items-center gap-2">
           <OpenAgentFolderButton className="hidden sm:inline-flex" />
-          <Link
-            href="/scaffold?new=1"
-            className={buttonVariants({ variant: "outline", size: "sm" })}
-          >
-            <Sparkles className="size-3.5" />
-            Create new agent
-          </Link>
+          <Button size="sm" onClick={() => setWorkbenchOpen(true)}>
+            <Wand2 className="size-3.5" />
+            Edit with AI
+          </Button>
           <Link
             href="/preview"
             target="_blank"
@@ -350,6 +349,14 @@ export default function StudioPage() {
       </div>
       <FloatingAgentChat
         key={activeRoot}
+        agentName={agentName || manifest?.name || "Agent"}
+        agentScope={activeRoot}
+        eveHost={previewHost}
+      />
+      <AgentWorkbenchOverlay
+        key={`workbench-${activeRoot}`}
+        open={workbenchOpen}
+        onClose={() => setWorkbenchOpen(false)}
         agentName={agentName || manifest?.name || "Agent"}
         agentScope={activeRoot}
         eveHost={previewHost}

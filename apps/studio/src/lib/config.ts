@@ -2,8 +2,10 @@ import { cookies } from "next/headers";
 import { resolve } from "node:path";
 import {
   discoverEveAgentsCached,
+  findEnclosingWorkspace,
   getLastForgeProject,
   isEveProjectRoot,
+  walkUpForForgeWorkspace,
 } from "@forge/core";
 
 const AGENT_COOKIE = "forge-agent-root";
@@ -17,8 +19,26 @@ function forgeWorkspaceRootEnv(): string | undefined {
   return process.env["FORGE_WORKSPACE_ROOT"];
 }
 
+/**
+ * Resolve the active monorepo workspace root. Prefer the explicit env var set
+ * by `forge dev`, but fall back to walking up from the launched agent so the
+ * Studio still treats sibling agents as a workspace even when started directly
+ * (without the CLI exporting FORGE_WORKSPACE_ROOT).
+ */
+function resolveStudioWorkspaceRoot(): string | undefined {
+  const env = forgeWorkspaceRootEnv();
+  if (env) return resolve(env);
+
+  const projectRoot = forgeProjectRootEnv();
+  if (projectRoot && isEveProjectRoot(projectRoot)) {
+    const ws = walkUpForForgeWorkspace(projectRoot) ?? findEnclosingWorkspace(projectRoot);
+    if (ws) return resolve(ws);
+  }
+  return undefined;
+}
+
 function getAllowedAgentRoots(): string[] {
-  const workspace = forgeWorkspaceRootEnv();
+  const workspace = resolveStudioWorkspaceRoot();
   if (workspace) {
     return discoverEveAgentsCached(workspace).map((agent) => resolve(agent.root));
   }
@@ -65,7 +85,7 @@ export async function getProjectRoot(): Promise<string> {
 }
 
 export function getWorkspaceRoot(): string | undefined {
-  return forgeWorkspaceRootEnv();
+  return resolveStudioWorkspaceRoot();
 }
 
 export { AGENT_COOKIE };
