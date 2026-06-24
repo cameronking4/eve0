@@ -22,7 +22,7 @@ import { InlineToolDebug } from "@/components/tools/tool-debug-panel";
 import { ToolFlowEditor } from "@/components/tools/tool-flow-editor";
 import { SkillsPanel } from "@/components/skills/skills-panel";
 import { FileEditorWorkspace } from "@/components/editor/file-editor-workspace";
-import { Badge } from "@/components/ui/badge";
+import { AgentSelector } from "@/components/agent-selector";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -100,8 +100,7 @@ export default function StudioPage() {
     };
   }, [router]);
 
-  const { activeRoot, agentName, previewHost, workspaceRoot, isLoading, isSwitching } =
-    useProject();
+  const { activeRoot, agentName, previewHost, isLoading, isSwitching } = useProject();
   const { refresh: refreshStaging } = useStaging();
   const [panel, setPanel] = useState<Panel>("overview");
   const [manifest, setManifest] = useState<EveManifest | null>(null);
@@ -215,18 +214,7 @@ export default function StudioPage() {
     <div className="flex h-screen flex-col bg-background">
       <header className="flex h-14 shrink-0 items-center gap-3 border-b px-4">
         <div className="font-semibold tracking-tight">Forge</div>
-        <Badge variant="secondary">Eve Agent Studio</Badge>
-        {workspaceRoot ? (
-          <span className="hidden truncate text-xs text-muted-foreground md:inline">
-            {workspaceRoot}
-          </span>
-        ) : (
-          projectRoot && (
-            <span className="hidden truncate text-xs text-muted-foreground md:inline">
-              {projectRoot}
-            </span>
-          )
-        )}
+        <AgentSelector onSwitch={handleAgentSwitch} variant="compact" />
         <div className="ml-auto flex items-center gap-2">
           <OpenAgentFolderButton className="hidden sm:inline-flex" />
           <Link
@@ -255,7 +243,6 @@ export default function StudioPage() {
           tree={tree}
           selectedFile={selectedFile}
           onSelectFile={openFile}
-          onAgentSwitch={handleAgentSwitch}
           disabled={isSwitching}
         />
 

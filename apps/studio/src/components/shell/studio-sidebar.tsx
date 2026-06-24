@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import type { FileTreeNode } from "@forge/core";
-import { AgentSelector } from "@/components/agent-selector";
 import { OpenAgentFolderButton } from "@/components/open-agent-folder-button";
 import { ProjectFileTree } from "@/components/file-tree/project-file-tree";
 import { StudioNav, type StudioPanel } from "@/components/shell/studio-nav";
@@ -14,7 +13,6 @@ type StudioSidebarProps = {
   tree: FileTreeNode[];
   selectedFile: string | null;
   onSelectFile: (path: string) => void;
-  onAgentSwitch: () => void | Promise<void>;
   disabled?: boolean;
 };
 
@@ -24,7 +22,6 @@ export function StudioSidebar({
   tree,
   selectedFile,
   onSelectFile,
-  onAgentSwitch,
   disabled,
 }: StudioSidebarProps) {
   const [navOpen, setNavOpen] = useState(true);
@@ -37,7 +34,6 @@ export function StudioSidebar({
       )}
     >
       <div className="flex shrink-0 flex-col gap-1.5 border-b p-2">
-        <AgentSelector onSwitch={onAgentSwitch} />
         <div className="sm:hidden">
           <OpenAgentFolderButton className="w-full" />
         </div>
